@@ -1,0 +1,42 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+application_default_credentials.json
+credentials*.json
+service-account*.json
+*.pem
+*.p12
+
+# Notebook and coverage artifacts
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local outputs, logs, and temporary files
+local_output/
+reports/_local/
+tmp/
+temp/
+*.tmp
+*.temp
+*.log
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
