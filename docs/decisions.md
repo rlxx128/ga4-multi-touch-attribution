@@ -1,69 +1,69 @@
 # Decision Register
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
-This register separates owner-approved analytical definitions from proposals.
-The public GA4 sample is used for portfolio analysis and does not represent the
-actual business performance of Google Merchandise Store.
+This register separates owner-approved analytical definitions from unresolved
+choices. The public GA4 sample is used for portfolio analysis and does not
+represent the actual business performance of Google Merchandise Store.
 
 ## Confirmed decisions
 
 | Decision | Confirmed value | Scope | Confirmed on |
 |---|---|---|---|
-| Current phase | Phase 2A executed and validated; stop at mapping approval gate | Do not create Phase 2B tables yet | 2026-08-05 |
+| Current phase | Phase 2B executed and validated; stop before Phase 3 | No attribution output is approved | 2026-08-06 |
 | GCP project | `ga4-multi-touch-attribution` | Configured execution project | 2026-08-03 |
-| BigQuery dataset | `ga4_attribution` | Existing dataset only; do not create another dataset | 2026-08-03 |
-| BigQuery location | `US` | All query jobs and destination tables | 2026-08-03 |
+| BigQuery dataset | `ga4_attribution` | Existing dataset only | 2026-08-03 |
+| BigQuery location | `US` | Query jobs and destination tables | 2026-08-03 |
 | GA4 source | `bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*` | Public read-only source | 2026-08-03 |
-| Configured date range | 2020-11-01 to 2021-01-31 | `_TABLE_SUFFIX` `20201101` through `20210131` | 2026-08-03 |
-| Maximum bytes billed | 1,000,000,000 bytes per query | Dry run before every executable query | 2026-08-03 |
-| Authentication | Application Default Credentials | Never store or print credentials or tokens | 2026-08-03 |
-| Conversion event | `purchase` | Phase 2 core model | 2026-08-05 |
+| Date range | 2020-11-01 through 2021-01-31 | `_TABLE_SUFFIX` `20201101` through `20210131` | 2026-08-03 |
+| Query guardrail | Dry run plus `maximum_bytes_billed = 1,000,000,000` per query | Every executable query | 2026-08-03 |
+| Conversion event | `purchase` | Core model | 2026-08-05 |
 | User identifier | `user_pseudo_id` | Journey and order ownership | 2026-08-05 |
-| Session identifier | SHA-256 key over `user_pseudo_id` and `ga_session_id` | Prevent raw session-ID collisions across users | 2026-08-05 |
-| Order identifier | SHA-256 key over `user_pseudo_id` and a valid trimmed `transaction_id` | Exclude null, blank, and case-insensitive `(not set)` IDs | 2026-08-05 |
-| Order timestamp | Earliest eligible purchase timestamp | Deduplicated order grain | 2026-08-05 |
-| Order revenue | Maximum observed `purchase_revenue_in_usd` | Deduplicated order grain | 2026-08-05 |
-| Session-source priority | Earliest valid same-event source tuple; earliest external referrer after internal-domain exclusion; first-user fallback; explicit Direct or Unknown | Phase 2 source recovery | 2026-08-05 |
-| Direct/Unknown distinction | Explicit `(direct)` source or `(none)` medium is Direct; no reliable evidence is Unknown | Provisional source-resolution output pending mapping approval | 2026-08-05 |
-| Baseline lookback | 30 days | Phase 2 conversion paths | 2026-08-05 |
-| Conversion cycle | After the previous order and ending at the current order | Phase 2 conversion paths | 2026-08-05 |
+| Session identifier | SHA-256 key over `user_pseudo_id` and `ga_session_id` | One composite Session key | 2026-08-05 |
+| Order identifier | SHA-256 key over `user_pseudo_id` and valid trimmed `transaction_id` | Excludes null, blank, and case-insensitive `(not set)` | 2026-08-05 |
+| Order timestamp and revenue | Earliest eligible purchase timestamp; maximum observed `purchase_revenue_in_usd` | Deduplicated order grain | 2026-08-05 |
+| Internal storefront | Exact normalized registered-domain match to `googlemerchandisestore.com`, including all subdomains | Exclude from event, referrer, and first-user source evidence; no substring matching | 2026-08-06 |
+| Session source priority | Earliest non-internal same-event tuple; earliest external referrer; non-internal first-user fallback; explicit Direct; Unknown | Rebuilt source candidates | 2026-08-06 |
+| Medium-only evidence | Retain null-source `referral` medium as Referral; label `source_missing_flag` and `source_quality = 'medium_only'` | Do not claim a specific referring website | 2026-08-06 |
+| Google referrer inference | External `www.google.com` referrer becomes Organic Search | Preserve raw referrer and label inference/tier | 2026-08-06 |
+| Internal admin traffic | `analytics.google.com` is internal/administrative | Retain Session, assign no channel, exclude from marketing conversion paths | 2026-08-06 |
+| Creator Academy | `creatoracademy.youtube.com` maps to Referral | Explicit exception before ordinary YouTube social mapping | 2026-08-06 |
+| YouTube and paid social | Ordinary YouTube is Organic Social; explicit paid-social evidence is Paid Social | Paid Social remains a valid label even when unobserved | 2026-08-06 |
+| Direct and Unknown | Direct requires explicit `(direct)` source or `(none)` medium; missing reliable evidence remains Unknown | Never merge Unknown into Direct | 2026-08-06 |
+| Channel mapping | First-match-wins order: Direct, Paid Social, Paid Search, Display, Email, Affiliates, Organic Search, Organic Social, Referral, Unknown, Other | Version `phase2b_channel_v1_20260806` | 2026-08-06 |
+| Baseline lookback | 30 days | Conversion paths | 2026-08-05 |
+| Conversion cycle | Strictly after the previous order and through the current order | Disjoint order cycles | 2026-08-05 |
 | Direct treatment | Retain Direct | Baseline paths | 2026-08-05 |
-| Repeated sessions | Retain every distinct Session | Baseline paths | 2026-08-05 |
+| Repeated sessions | Retain every distinct Session; do not silently reuse a Session across cycles | Phase 2B paths | 2026-08-06 |
+| Same-Session multiple orders | Report separately and validate no path reuse | Phase 2B exception audit | 2026-08-06 |
 | Attribution interpretation | Descriptive only, never proof of causal incrementality | Entire project | Mandatory |
 
-## Phase 2A executed evidence
+## Phase 2B executed evidence
 
-- `event_base` contains 4,295,584 events over 92 dates.
-- `orders` contains exactly 4,466 eligible deduplicated orders.
-- `session_source_candidates` contains 360,129 unique composite Sessions.
-- All 17 Phase 2A validation checks passed.
-- Source-resolution coverage is provisional until the internal-domain list and
-  channel-mapping decisions below are approved.
-- No channel was assigned, and no Phase 2B or attribution output was created.
+- Rebuilt source candidates and `session_touchpoints` each contain 360,129
+  unique Sessions.
+- `orders` remains exactly 4,466 eligible deduplicated orders.
+- All 70,820 storefront-affected provisional Sessions were re-resolved
+  individually and reconciled.
+- `conversion_touchpoints` contains 9,172 eligible Session/order rows covering
+  4,043 orders; 423 orders are explicitly reported without a touchpoint.
+- All 34 Phase 2B validation checks passed.
+- No First Click, Last Click, Last Non-direct, Linear, Time Decay, Markov,
+  Shapley, ROAS, budget, or dashboard output was created.
 
-See `reports/phase2a_core_extraction_and_source_recovery.md` for exact coverage,
-query costs, internal-referrer candidates, and mapping predicates.
+See `reports/phase2b_core_data_model.md` for the executed coverage, channel,
+path, exception, and query-cost results.
 
-## Pending decisions at the Phase 2A approval gate
+## Decisions still pending after Phase 2B
 
-| Decision required | Options | Recommendation | Expected impact / approval gate |
-|---|---|---|---|
-| Internal registered domain list | Treat `googlemerchandisestore.com` and all subdomains as internal, or approve a narrower host list | Approve the registered domain and its subdomains as internal; keep `google.com` external | Controls external-referrer eligibility. Four observed referrer hosts are covered by the store domain; `www.google.com` supplies 15 provisional external-referrer Sessions. |
-| Internal storefront source tuples | Retain storefront-domain `referral` tuples, or exclude them as self-referrals and re-run the source fallback | Exclude and re-resolve them before channel assignment | Affects 70,820 provisional Sessions (19.665176%); retaining them would classify likely self-referrals as Referral under the current proposal. |
-| Source-missing referral medium | Treat a valid `referral` medium with null source as Referral, or demote it to Unknown | Retain Referral because the medium is explicit, but label the limitation | Affects 29,400 Sessions (8.163741%). |
-| Google administrative referrals | Keep sources such as `analytics.google.com` and `moma.corp.google.com` as Referral, classify as Other, or exclude as operational/internal traffic | Exclude only an explicitly approved administrative-host list; do not exclude all `google.com` traffic | `analytics.google.com` alone affects 3,455 Sessions; broad exclusion could remove legitimate search, mail, support, or content referrals. |
-| YouTube/Creator Academy treatment | Classify all YouTube subdomains as Organic Social, or retain content/training subdomains as Referral | Keep `creatoracademy.youtube.com` as Referral and classify ordinary YouTube hosts as Organic Social | The current proposal would classify 889 Creator Academy Sessions as Organic Social. |
-| Google referrer inference | Map external `www.google.com` referrers to Organic Search or Referral | Organic Search is defensible, with the inference documented | Affects 15 Sessions (0.004165%). |
-| Ordered channel mapping | Approve the 11 exact predicates in the Phase 2A report, with any exceptions above, or provide revised rules | Approve only after resolving the internal and ambiguous-value rows above | Blocks `session_touchpoints` and every conversion path in Phase 2B. |
-
-## Decisions that remain pending after Phase 2A but do not block mapping review
-
-| Decision | When required | Current recommendation |
+| Decision | When required | Evidence / expected impact |
 |---|---|---|
-| Same-Session multiple-order handling | Phase 2B path validation | Report separately and avoid silently duplicating a Session across conversion cycles. |
-| Non-converting journey definition | Before conversion-plus-non-conversion Markov | Produce a dedicated decision note. |
-| Simulated channel costs | Phase 6 | Use owner-supplied simulated parameters only. |
-| Dashboard tool | Phase 6 | Decide between approved reporting tools after analytical tables are stable. |
+| Whether to exclude `moma.corp.google.com` as administrative traffic | Before changing Phase 2 paths or beginning final attribution inputs | Currently audit-only and not excluded: 77 Sessions, 67 users, 17 affected orders and 17 touchpoint rows. Exclusion would remove those rows and can change path composition. |
+| Phase 3 attribution implementation approval | Before any attribution table is created | The core paths pass validation, but no model has been approved for execution in this phase. |
+| Time-decay half-life | Before Time Decay implementation | Different half-lives change within-path credit allocation. |
+| Repeated-channel compression sensitivity | Phase 5 | Baseline retains every distinct Session; compression would change path length and some model weights. |
+| Non-converting journey definition | Before conversion-plus-non-conversion Markov | Requires observation window, inactivity cutoff, path ending, repeat-journey, and right-boundary decisions. |
+| Simulated channel costs | Phase 6 | Use owner-supplied simulated parameters only; do not imply observed spend. |
+| Dashboard tool | Phase 6 | Decide after analytical tables are stable. |
 | Business recommendation language | Phase 6 | Keep attribution descriptive and propose an incrementality experiment. |
-| BigQuery table retention | Before 2026-10-04 or before long-term handoff | Existing dataset defaults expire Phase 2A tables after 60 days; approve extension/removal only if persistence is needed. |
+| BigQuery table retention | Before the dataset's 60-day default expiry or long-term handoff | Changing expiration metadata requires separate approval. |

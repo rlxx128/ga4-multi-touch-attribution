@@ -10,13 +10,12 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 2A created and validated `event_base`, `orders`, provisional Session source
-candidates, source-coverage audits, internal-referrer candidates, and an ordered
-channel-mapping proposal. The 4,466-order hard reconciliation passed, as did all
-17 Phase 2A validation checks. Work is stopped at the required internal-domain
-and mapping approval gate; no channel assignment, conversion path, or attribution
-model has been created. See
-`reports/phase2a_core_extraction_and_source_recovery.md`.
+Phase 2B created and validated the approved Session-source, channel, and
+conversion-path layers. The model retains 360,129 unique Sessions and exactly
+4,466 eligible deduplicated orders; 4,043 orders have 9,172 eligible conversion
+touchpoints and 423 unmatched orders are explicitly reported. All 34 Phase 2B
+checks pass. Work is stopped before Phase 3: no attribution model or credit
+allocation has been created. See `reports/phase2b_core_data_model.md`.
 
 ## Data source
 
@@ -37,7 +36,7 @@ notebooks/           Thin analysis notebooks built on reusable source code
 reports/figures/     Generated figures for reporting
 reports/tables/      Generated result tables for reporting
 scripts/             Environment, audit, and guarded build runners
-sql/audit/           Phase 1 audits and Phase 2A review tables
+sql/audit/           Data-quality, source, mapping, and path audits
 sql/staging/         Staging models
 sql/intermediate/    Intermediate models
 sql/marts/           Reporting models
@@ -111,6 +110,18 @@ The runner refuses to replace existing target tables. It supports
 incomplete execution prefix. Every query is dry-run first and uses the configured
 maximum-bytes-billed ceiling.
 
+The approved Phase 2B runner is resumable and dry-runs every query before
+execution:
+
+```powershell
+python scripts/run_phase2b.py --execute
+```
+
+Recovery flags such as `--rebuild-source`, `--rebuild-derived`, and
+`--rebuild-validation` require both `--execute` and `--resume`; they exist for
+auditable rebuilds after an implementation correction and should not be used as
+ordinary first-run options.
+
 ## Analytical phases
 
 1. Repository and environment
@@ -129,10 +140,14 @@ documented in `docs/data_dictionary.md` and `docs/methodology.md`.
 ## Limitations
 
 - The public data covers a short, obfuscated observation window.
-- Session source candidates prioritize event evidence and external referrers;
+- Session sources prioritize non-internal event evidence and external referrers;
   first-user acquisition is retained only as an explicitly labelled fallback.
-- Internal-domain and ordered channel mapping decisions remain unresolved at the
-  Phase 2A approval gate.
+- Missing-source referral media are retained as Referral with a quality flag;
+  they do not identify a specific referring website.
+- `analytics.google.com` is excluded from marketing paths, while
+  `moma.corp.google.com` remains an audit-only unresolved candidate.
+- 423 eligible orders have no Session after the previous-order boundary and are
+  excluded from later attribution unless the owner changes the path definition.
 - The sample does not provide complete reliable channel spend, so future budget
   work will be a parameterized scenario rather than actual ROAS estimation.
 - Descriptive attribution does not estimate causal incrementality.

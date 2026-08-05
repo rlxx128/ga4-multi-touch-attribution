@@ -1,120 +1,134 @@
-# Planned Methodology
+# Methodology
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
 ## Current implementation status
 
-No attribution model has been implemented. Phase 2A created and validated the
-event, order, internal-referrer, and session-source-candidate layers. Work is
-stopped at the required internal-domain and ordered channel-mapping approval
-gate. `session_touchpoints` and conversion paths do not exist yet.
+Phase 2B is implemented and validated. The implemented scope ends at approved
+Session source resolution, mutually exclusive channel classification, and
+conversion-cycle touchpoints. No attribution model or credit allocation has
+been implemented.
 
-## Implemented Phase 2A definitions
+## Core event and order definitions
 
-`event_base` extracts only audited source fields over suffixes `20201101`
-through `20210131`. The build is physically split into three monthly queries;
-each query is dry-run before execution and capped at 1,000,000,000 billed bytes.
-The destination is clustered but deliberately not partitioned by historical
-event date because the existing dataset has a 60-day default partition expiry.
+`event_base` extracts the audited fields for suffixes `20201101` through
+`20210131`. The source scan is split into monthly bounded queries. Historical
+event-date partitioning is not used because the existing dataset has a 60-day
+default partition expiration; tables are clustered instead.
 
 Orders are purchase events grouped by `user_pseudo_id` and a trimmed valid
 `transaction_id`. Null, blank, and case-insensitive `(not set)` identifiers are
-excluded. The order timestamp is the minimum eligible purchase timestamp and
-USD order revenue is the maximum observed `purchase_revenue_in_usd`.
+excluded. The earliest eligible purchase timestamp is the order timestamp, and
+the maximum observed `purchase_revenue_in_usd` is the deduplicated order value.
 
-Session identity combines `user_pseudo_id` and integer `ga_session_id` using a
-deterministic SHA-256 key. The provisional source evidence is resolved in this
-order:
+Session identity is a deterministic SHA-256 key over `user_pseudo_id` and the
+integer `ga_session_id`.
 
-1. earliest event with at least one usable source, medium, or campaign value;
-2. earliest external `page_referrer` after proposed internal-domain exclusion;
-3. earliest usable first-user source tuple, explicitly labelled as a fallback;
-4. explicit Direct when source is `(direct)` or medium is `(none)`; otherwise
-   Unknown.
+## Approved Session source recovery
 
-Blank and placeholder values `(not set)`, `(not provided)`, `(data deleted)`,
-`<other>`, and `unknown` are not treated as usable source components. The
-source, medium, and campaign selected at event level always come from the same
-event. No marketing channel is assigned in `session_source_candidates`.
+Before selecting source evidence, blank values and `(not set)`,
+`(not provided)`, `(data deleted)`, `<other>`, and `unknown` placeholders are
+normalized to null. Host-like sources are normalized with `NET.HOST`; registered
+domains use `NET.REG_DOMAIN`.
 
-The current coverage remains provisional. Internal storefront source tuples
-and observed ambiguous referrers must be resolved before the ordered mapping is
-applied in Phase 2B.
+The internal storefront rule is exact normalized registered-domain equality to
+`googlemerchandisestore.com`. It therefore covers the registered domain and its
+subdomains without using a substring predicate. The rule is applied separately
+to event-level source, page referrer, and first-user source evidence.
 
-## Planned analytical workflow
+Each Session is then resolved once in this order:
 
-The work is intended to proceed through controlled phases:
+1. the earliest non-internal valid event-level source/medium/campaign tuple,
+   with all tuple components taken from the same event;
+2. the earliest non-internal page referrer;
+3. the earliest non-internal first-user tuple, explicitly labelled
+   `first_user_fallback`;
+4. explicit Direct evidence from `(direct)` source or `(none)` medium;
+5. Unknown when no reliable evidence remains.
 
-1. Audit the public GA4 source schema, date coverage, event distribution,
-   purchase quality, session identifiers, and traffic-source field availability.
-2. Build an event-level base model using only fields confirmed by the audit.
-3. Construct user-session touchpoints with an approved session-source priority
-   and mutually exclusive channel mapping.
-4. Deduplicate purchases into orders using approved transaction and revenue
-   rules.
-5. Match eligible sessions to each order under an approved lookback window and
-   conversion-cycle boundary.
-6. Implement and reconcile rule-based attribution models.
-7. Implement Markov attribution only after rule-based models pass validation.
-8. Compare model results and test sensitivity to path definitions and lookback
-   windows.
-9. Prepare transparent simulated budget scenarios and a proposed incrementality
-   experiment; do not treat attributed revenue as causal lift.
+A missing source with a usable medium is retained with
+`source_missing_flag = TRUE` and `source_quality = 'medium_only'`. In particular,
+a null-source `referral` medium remains Referral, but does not identify a
+specific referring website.
 
-Each phase must pass its validation checks before the next phase begins.
+For the approved external `www.google.com` referrer inference, the raw page
+referrer remains available, `source_resolution_tier = 'external_referrer'`,
+`is_inferred_source = TRUE`, and
+`inference_rule = 'google_referrer_to_organic_search'`. It is not represented as
+native event-level evidence.
 
-## Rule-based attribution
+## Administrative traffic and channel mapping
 
-The planned rule-based models are first click, last click, last non-direct,
-linear, and time decay. These models allocate each eligible conversion or its
-revenue according to explicit positional or time-based rules. For every approved
-model, transaction-level weights must sum to one within numerical tolerance, and
-attributed conversions and revenue must reconcile to the eligible totals.
+`analytics.google.com` Sessions are retained with
+`is_internal_admin_traffic = TRUE`, an explicit reason, no marketing channel,
+and `is_marketing_eligible = FALSE`. They are excluded only when constructing
+marketing conversion paths. `moma.corp.google.com` is labelled as an audit-only
+candidate and remains marketing-eligible until a later owner decision. No broad
+`google.com` exclusion is used.
 
-Rule-based models are deterministic descriptions of how credit changes under
-chosen rules. They do not estimate what would have happened without a channel.
+For eligible Sessions, mapping is a single ordered CASE expression with version
+`phase2b_channel_v1_20260806`. The first matching rule wins:
 
-## Markov attribution
+1. Direct
+2. Paid Social
+3. Paid Search
+4. Display
+5. Email
+6. Affiliates
+7. Organic Search
+8. Organic Social
+9. Referral
+10. Unknown
+11. Other
 
-The planned Markov model will represent observed journeys as transitions from
-`Start` through channel states to an absorbing `Conversion` state. A `Null`
-absorbing state may be added only after the construction of non-converting paths
-has been explicitly approved. Channel contribution will be based on normalized
-removal effects after validating transition probabilities and baseline
-conversion probability.
+The Creator Academy exception maps `creatoracademy.youtube.com` to Referral.
+Ordinary YouTube/social domains map to Organic Social unless explicit
+paid-social evidence matches the earlier Paid Social rule. Direct requires
+explicit evidence; Unknown is not folded into Direct. Administrative Sessions
+are intercepted before the marketing mapping.
 
-Unlike rule-based models, Markov attribution uses the structure of observed
-path transitions rather than a fixed position rule. It is still descriptive:
-removal effects are model-based path contributions, not causal incrementality.
-Markov implementation must wait until rule-based attribution and reconciliation
-checks pass.
+## Conversion-cycle construction
 
-## Approved lookback and planned sensitivity settings
+Orders are sequenced within each user by `order_ts` and `order_key`. For an
+order, an eligible touchpoint must:
 
-The approved baseline lookback window is 30 days. The planned sensitivity
-windows are 7 and 14 days in a later phase. Changing the window can alter
-eligible touchpoints, average path length, channel contribution, and channel
-ranking.
+- have the same `user_pseudo_id`;
+- start at or before the order timestamp;
+- start no earlier than 30 days before the order;
+- start strictly after the previous order timestamp when a previous order
+  exists;
+- be marketing-eligible and have one approved channel.
 
-## Pending business definitions
+All distinct eligible Sessions, including Direct, are retained. Touchpoints are
+ordered by Session start and Session key. Path length is the number of retained
+Sessions for the order. The strict previous-order boundary makes cycles
+disjoint, and validation requires a Session to appear in at most one order
+cycle. Equal-timestamp orders are deterministically sequenced and reported as
+an exception condition rather than silently sharing a path.
 
-The following definitions remain unresolved and require approval at their
-documented phase gates:
+Orders with no retained touchpoint are kept in `orders_without_touchpoints`
+with a specific diagnostic reason. Administrative impact is measured both
+before and after its exclusion.
 
-- channel mapping;
-- internal-domain and self-referral handling;
-- ambiguous referral and social-source values;
-- same-Session multiple-order handling;
-- construction and boundary treatment of non-converting paths;
-- simulated channel costs;
-- dashboard tool and interpretation of business recommendations.
+## Validation and query safety
 
-Suggested defaults are recorded separately in `docs/decisions.md` and must not
-be treated as approved business definitions.
+Every executable BigQuery query is dry-run first and uses the configured
+1,000,000,000-byte `maximum_bytes_billed` ceiling. Any wildcard source scan is
+bounded by `_TABLE_SUFFIX`. Phase 2B validation covers Session and order counts,
+key uniqueness, source-tier reconciliation, internal-domain exclusion, Direct
+and Unknown evidence, medium-only quality, channel validity and uniqueness,
+admin-path exclusion, Creator Academy and Google inference exceptions, temporal
+path boundaries, unmatched-order reconciliation, Session reuse, and the absence
+of attribution output tables.
 
-## Interpretation boundary
+## Later analytical workflow
 
-All planned attribution methods are descriptive. Neither rule-based credit nor
-Markov removal effects prove that a channel caused incremental conversions or
-revenue. A causal budget decision would require an additional incrementality
-experiment or another defensible causal design.
+The next phase may implement deterministic rule-based attribution only after
+separate approval. Planned later models are First Click, Last Click, Last
+Non-direct, Linear, and Time Decay. Markov must wait until rule-based weights,
+conversion totals, and revenue totals reconcile. Non-converting paths require a
+separate owner decision before they can be used.
+
+All future attribution is descriptive. Neither rule-based credit nor Markov
+removal effects establish causal incrementality; causal budget decisions require
+an experiment or another defensible causal design.

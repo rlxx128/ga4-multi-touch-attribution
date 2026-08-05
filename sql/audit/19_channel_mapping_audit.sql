@@ -1,0 +1,33 @@
+SELECT
+  source_resolution_tier,
+  resolved_source,
+  resolved_medium,
+  resolved_campaign,
+  source_quality,
+  is_inferred_source,
+  is_internal_admin_traffic,
+  internal_admin_reason,
+  is_internal_admin_candidate,
+  is_marketing_eligible,
+  channel,
+  mapping_rule_priority,
+  mapping_rule_name,
+  mapping_version,
+  COUNT(*) AS session_count,
+  COUNT(DISTINCT user_pseudo_id) AS user_count
+FROM `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.session_touchpoints`
+GROUP BY
+  source_resolution_tier,
+  resolved_source,
+  resolved_medium,
+  resolved_campaign,
+  source_quality,
+  is_inferred_source,
+  is_internal_admin_traffic,
+  internal_admin_reason,
+  is_internal_admin_candidate,
+  is_marketing_eligible,
+  channel,
+  mapping_rule_priority,
+  mapping_rule_name,
+  mapping_version
