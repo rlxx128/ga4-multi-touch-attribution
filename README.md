@@ -10,11 +10,13 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 1 completed a bounded, read-only audit of source schema, date coverage,
-events, purchase quality, identifiers, revenue, and traffic-source availability.
-No analytical tables or attribution models have been created. Phase 2 remains
-blocked until the owner reviews the audit and approves the required business
-definitions. See `reports/phase1_data_audit.md`.
+Phase 2A created and validated `event_base`, `orders`, provisional Session source
+candidates, source-coverage audits, internal-referrer candidates, and an ordered
+channel-mapping proposal. The 4,466-order hard reconciliation passed, as did all
+17 Phase 2A validation checks. Work is stopped at the required internal-domain
+and mapping approval gate; no channel assignment, conversion path, or attribution
+model has been created. See
+`reports/phase2a_core_extraction_and_source_recovery.md`.
 
 ## Data source
 
@@ -34,8 +36,8 @@ docs/                Project specification and decision register
 notebooks/           Thin analysis notebooks built on reusable source code
 reports/figures/     Generated figures for reporting
 reports/tables/      Generated result tables for reporting
-scripts/             Environment and connection checks
-sql/audit/           Phase 1 audit SQL
+scripts/             Environment, audit, and guarded build runners
+sql/audit/           Phase 1 audits and Phase 2A review tables
 sql/staging/         Staging models
 sql/intermediate/    Intermediate models
 sql/marts/           Reporting models
@@ -92,6 +94,23 @@ The connection test uses ADC, reads only the `20201101` source suffix, performs
 a dry run first, enforces a 1,000,000,000-byte billing ceiling, and executes only
 a `SELECT` query. It does not create or modify cloud resources.
 
+Run Phase 2A preflight only:
+
+```powershell
+python scripts/run_phase2a.py
+```
+
+Run the new-table build only after approval:
+
+```powershell
+python scripts/run_phase2a.py --execute
+```
+
+The runner refuses to replace existing target tables. It supports
+`--execute --resume` only when existing Phase 2A tables form a validated,
+incomplete execution prefix. Every query is dry-run first and uses the configured
+maximum-bytes-billed ceiling.
+
 ## Analytical phases
 
 1. Repository and environment
@@ -110,8 +129,10 @@ documented in `docs/data_dictionary.md` and `docs/methodology.md`.
 ## Limitations
 
 - The public data covers a short, obfuscated observation window.
-- Session traffic-source logic must be based on fields confirmed during the
-  Phase 1 audit, not assumed from first-user acquisition fields.
+- Session source candidates prioritize event evidence and external referrers;
+  first-user acquisition is retained only as an explicitly labelled fallback.
+- Internal-domain and ordered channel mapping decisions remain unresolved at the
+  Phase 2A approval gate.
 - The sample does not provide complete reliable channel spend, so future budget
   work will be a parameterized scenario rather than actual ROAS estimation.
 - Descriptive attribution does not estimate causal incrementality.

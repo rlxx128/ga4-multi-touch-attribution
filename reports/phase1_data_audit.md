@@ -4,10 +4,11 @@ Last updated: 2026-08-04
 
 ## Status and scope
 
-Phase 1 audit execution is complete and awaiting owner acceptance and business-
-definition approvals. The audit used the public, obfuscated GA4 ecommerce sample;
-its findings do not represent the actual business performance of Google
-Merchandise Store.
+Phase 1 audit execution was accepted before Phase 2A began. The audit used the
+public, obfuscated GA4 ecommerce sample; its findings do not represent the
+actual business performance of Google Merchandise Store. The Phase 1 decision
+requests are retained below as historical evidence; approved definitions and
+remaining Phase 2A gate decisions are recorded in `docs/decisions.md`.
 
 The audit was read-only. It created no BigQuery datasets or tables and used no
 channel mapping, session model, order model, attribution model, Markov model,

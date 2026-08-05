@@ -1,94 +1,130 @@
-# Provisional Data Dictionary
+# Data Dictionary
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 ## Current implementation status
 
-No analytical tables have been created yet. Phase 1 completed a read-only source
-audit and produced local CSV evidence only. Core table schemas remain provisional
-until the owner approves the Phase 2 business definitions.
+Phase 2A created eight tables in
+`ga4-multi-touch-attribution.ga4_attribution`. The source-candidate and mapping
+tables are explicitly provisional pending the approval gate. No channel,
+session touchpoint, conversion path, or attribution output has been created.
 
-## Confirmed source-field availability
+All Phase 2A tables inherit the existing dataset's 60-day table expiration.
 
-The Phase 1 schema audit confirmed these fields in all 92 selected daily shards:
+## `event_base`
 
-- `event_date`, `event_timestamp`, and `event_name`;
-- `user_pseudo_id` and repeated `event_params`;
-- `ecommerce.transaction_id`;
-- `ecommerce.purchase_revenue` and `ecommerce.purchase_revenue_in_usd`;
-- `traffic_source.source`, `traffic_source.medium`, and `traffic_source.name`.
+- Grain: one row per GA4 event.
+- Row count at validation: 4,295,584.
+- Physical design: clustered by `user_pseudo_id`, `session_key`, `event_name`;
+  not date-partitioned because the dataset's default partition expiration would
+  immediately expire historical partitions.
+- Event fields: `event_date`, `event_ts`, `event_timestamp`, `event_name`.
+- User/session fields: `user_pseudo_id`, `user_id`, `ga_session_id`,
+  `ga_session_number`, `session_key`.
+- Event source fields: `event_source`, `event_medium`, `event_campaign`.
+- Page fields: `page_location`, `page_location_host`,
+  `page_location_reg_domain`, `page_referrer`, `page_referrer_host`,
+  `page_referrer_reg_domain`.
+- First-user fields: `first_user_source`, `first_user_medium`,
+  `first_user_campaign`.
+- Context fields: `device_category`, `operating_system`, `browser`, `country`,
+  `region`, `city`.
+- Commerce fields: `transaction_id`, `purchase_revenue`,
+  `purchase_revenue_in_usd`.
 
-Relevant event parameters include `ga_session_id`, `source`, `medium`,
-`campaign`, and `page_referrer`. Availability of a parameter key is a data-level
-property and is quantified in the Phase 1 result tables.
+`session_key` is a deterministic SHA-256 hexadecimal key over the JSON
+representation of `user_pseudo_id` and `ga_session_id`.
 
-The sample does not contain `collected_traffic_source` or
-`session_traffic_source_last_click`. No replacement field or fallback priority
-has been approved yet.
+## `orders`
 
-Every table and field group below is provisional. Names, grains, keys, source
-fields, data types, null handling, and validation rules remain pending the Phase
-1 data audit and Phase 2 model implementation. Nothing in this document should
-be treated as a deployed BigQuery schema.
+- Grain: one row per valid `user_pseudo_id` plus trimmed `transaction_id`.
+- Row count at validation: 4,466.
+- Physical design: clustered by `user_pseudo_id`, `transaction_id`.
+- Key fields: `order_key`, `user_pseudo_id`, `transaction_id`.
+- Timing fields: `order_ts`, `order_date`, `conversion_session_key`.
+- Value field: `order_revenue_usd`, defined as maximum observed
+  `purchase_revenue_in_usd`.
+- Diagnostics: `purchase_event_count`, `duplicate_purchase_event_count`,
+  `distinct_revenue_value_count`, `minimum_observed_revenue_usd`,
+  `maximum_observed_revenue_usd`.
 
-## Planned analytical tables
+`order_key` is a deterministic SHA-256 hexadecimal key over the user and valid
+transaction identifier. The earliest eligible timestamp defines the order.
 
-### `event_base`
+## `internal_referrer_domain_audit`
 
-- Planned grain: one row per GA4 event.
-- Planned purpose: extract the event, user, session, traffic-source, device,
-  transaction, and revenue fields required by downstream models.
-- Schema status: provisional; pending source-schema and field-availability
-  checks in Phase 1 and implementation approval in Phase 2.
+- Grain: one observed `page_referrer_host` and registered-domain pair.
+- Row count at validation: 5.
+- Purpose: compare referrer domains with domains observed in `page_location`.
+- Evidence fields: `referrer_event_count`, `referrer_session_count`,
+  `referrer_user_count`, `first_observed_ts`, `last_observed_ts`,
+  `exact_host_page_location_event_count`,
+  `registered_domain_page_location_event_count`, and
+  `registered_domain_page_location_session_count`.
+- Proposal fields: `proposed_is_internal`, `proposal_reason`,
+  `approval_status`.
 
-### `session_touchpoints`
+The proposal is not a final internal-domain list.
 
-- Planned grain: one row per user session.
-- Planned purpose: summarize session boundaries, source/medium/campaign,
-  mutually exclusive channel classification, device context, and funnel-event
-  counts.
-- Planned session key: `user_pseudo_id` combined with `ga_session_id`, subject to
-  Phase 1 quality checks and owner approval.
-- Schema status: provisional; traffic-source priority and channel rules are
-  unresolved and pending Phase 1 evidence and Phase 2 approval.
+## `session_source_candidates`
 
-### `orders`
+- Grain: one composite user Session.
+- Row count at validation: 360,129.
+- Physical design: clustered by `user_pseudo_id`, `source_resolution_tier`.
+- Identity/time fields: `user_pseudo_id`, `ga_session_id`, `session_key`,
+  `session_start_ts`, `session_end_ts`, `session_date`.
+- Counts: `event_count`, `session_start_event_count`, `purchase_event_count`,
+  `raw_event_tuple_event_count`.
+- Resolution fields: `source_resolution_tier`, `resolved_source`,
+  `resolved_medium`, `resolved_campaign`.
+- Evidence timestamps/details: `event_tuple_ts`, `external_referrer_ts`,
+  `external_page_referrer`, `external_referrer_reg_domain`,
+  `first_user_tuple_ts`.
+- Status: `resolution_status` is
+  `PROVISIONAL_PENDING_INTERNAL_DOMAIN_AND_MAPPING_APPROVAL`.
 
-- Planned grain: one row per deduplicated transaction.
-- Planned purpose: retain the order timestamp, conversion session, transaction
-  identifier, revenue, and duplicate-event diagnostics.
-- Schema status: provisional; conversion, order-identity, deduplication, and
-  revenue definitions remain pending approval after Phase 1 quality checks.
+Allowed resolution tiers are `event_level_source`, `external_referrer`,
+`first_user_fallback`, `Direct`, and `Unknown`. This table does not contain a
+channel field.
 
-### `conversion_touchpoints`
+## `channel_source_coverage_audit`
 
-- Planned grain: one row per eligible session touchpoint per conversion cycle.
-- Planned purpose: order touchpoints within each conversion cycle and retain
-  path position, path length, time before conversion, channel, transaction, and
-  conversion value.
-- Schema status: provisional; lookback, conversion-cycle, Direct, and repeated-
-  channel rules remain pending approval before Phase 2 implementation.
+- Grain: one required source-resolution tier.
+- Row count: 5.
+- Fields: `sort_order`, `source_resolution_tier`, `session_count`,
+  `total_session_count`, `session_share`, `session_percentage`,
+  `coverage_status`.
+- Purpose: reconcile mutually exclusive source resolution to all candidate
+  Sessions.
 
-### `attribution_results`
+## `source_medium_campaign_frequency`
 
-- Planned grain: one row per transaction, attribution model, and credited
-  channel.
-- Planned purpose: retain attribution weight, attributed conversion, and
-  attributed revenue with reconciliation fields.
-- Schema status: provisional; this table is not planned for implementation until
-  rule-based models pass their prerequisite checks in a later phase.
+- Grain: one resolution-tier/source/medium/campaign combination.
+- Row count: 251.
+- Fields: `source_resolution_tier`, `resolved_source`, `resolved_medium`,
+  `resolved_campaign`, `session_count`, `total_session_count`, `session_share`,
+  `session_percentage`.
+- Purpose: provide the full observed-value review input for mapping approval.
 
-### `model_comparison`
+## `channel_mapping_proposal`
 
-- Planned grain: one row per channel.
-- Planned purpose: compare channel contribution across approved attribution
-  models for conversions and revenue.
-- Schema status: provisional; final columns depend on the models successfully
-  implemented and validated in later phases.
+- Grain: one ordered proposed channel predicate.
+- Row count: 11.
+- Fields: `priority`, `proposed_channel`, `predicate_sql`, `rationale`,
+  `approval_status`.
+- Status: every row is `PROPOSED_NOT_APPROVED`; the rules have not been applied.
 
-## Revision rule
+## `phase2a_validation_summary`
 
-This dictionary will be revised only from executed audit and modeling code.
-Phase 1 may document confirmed source-field availability; Phase 2 may replace
-provisional core-table definitions with implemented schemas. No numeric findings
-will be added unless generated by executed, reproducible analysis.
+- Grain: one Phase 2A validation check.
+- Row count: 17.
+- Fields: `check_id`, `observed_value`, `expected_value`,
+  `validation_status`.
+- Result at gate: all 17 checks passed.
+
+## Planned but not implemented
+
+`session_touchpoints`, `conversion_touchpoints`, and
+`orders_without_touchpoints` belong to Phase 2B and are blocked by mapping
+approval. `attribution_results` and `model_comparison` belong to later phases.
+They do not exist.
