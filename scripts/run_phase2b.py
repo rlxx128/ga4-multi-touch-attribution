@@ -35,7 +35,8 @@ FORBIDDEN_SQL_KEYWORDS = (
 )
 
 RESOLUTION_VERSION = "phase2b_source_v1_20260806"
-MAPPING_VERSION = "phase2b_channel_v1_20260806"
+MAPPING_VERSION = "phase2b_channel_v2_20260806"
+PATH_DEFINITION_VERSION = "phase2b_closeout_v1_20260806"
 
 REPLACED_TABLES = (
     "session_source_candidates",
@@ -150,54 +151,95 @@ CREATION_STEPS = (
         ("channel", "source_resolution_tier", "resolved_source"),
     ),
     BuildStep(
-        "10_conversion_touchpoints",
+        "10_conversion_touchpoints_strict",
+        ROOT / "sql" / "intermediate" / "05a_conversion_touchpoints_strict.sql",
+        "conversion_touchpoints_strict",
+        "create",
+        ("order_key", "session_key", "channel"),
+    ),
+    BuildStep(
+        "11_conversion_touchpoints",
         ROOT / "sql" / "intermediate" / "05_conversion_touchpoints.sql",
         "conversion_touchpoints",
         "create",
         ("order_key", "session_key", "channel"),
     ),
     BuildStep(
-        "11_order_path_coverage_audit",
+        "12_order_path_coverage_audit",
         ROOT / "sql" / "audit" / "20_order_path_coverage_audit.sql",
         "order_path_coverage_audit",
         "create",
         ("user_pseudo_id", "path_covered_after_admin_exclusion"),
     ),
     BuildStep(
-        "12_orders_without_touchpoints",
+        "13_orders_without_touchpoints",
         ROOT / "sql" / "intermediate" / "06_orders_without_touchpoints.sql",
         "orders_without_touchpoints",
         "create",
         ("exclusion_reason", "user_pseudo_id"),
     ),
     BuildStep(
-        "13_internal_admin_path_impact",
+        "14_internal_admin_path_impact",
         ROOT / "sql" / "audit" / "21_internal_admin_path_impact_audit.sql",
         "internal_admin_path_impact_audit",
     ),
     BuildStep(
-        "14_admin_domain_candidate_audit",
+        "15_admin_domain_candidate_audit",
         ROOT / "sql" / "audit" / "22_admin_domain_candidate_audit.sql",
         "admin_domain_candidate_audit",
     ),
     BuildStep(
-        "15_same_session_multiple_order_audit",
+        "16_same_session_multiple_order_audit",
         ROOT / "sql" / "audit" / "23_same_session_multiple_order_audit.sql",
         "same_session_multiple_order_audit",
         "create",
         ("session_reuse_violation", "user_pseudo_id"),
     ),
     BuildStep(
-        "16_path_length_distribution",
+        "17_path_length_distribution",
         ROOT / "sql" / "audit" / "24_path_length_distribution_audit.sql",
         "path_length_distribution_audit",
     ),
     BuildStep(
-        "17_phase2b_validation_summary",
+        "18_path_closeout_summary",
+        ROOT / "sql" / "audit" / "25_path_closeout_summary_audit.sql",
+        "path_closeout_summary_audit",
+    ),
+    BuildStep(
+        "19_phase2b_validation_summary",
         ROOT / "sql" / "validation" / "02_phase2b_validation.sql",
         "phase2b_validation_summary",
     ),
 )
+
+CLOSEOUT_TABLES = {
+    "internal_domain_rules",
+    "channel_mapping_rules",
+    "session_touchpoints",
+    "source_reprocessing_summary",
+    "channel_mapping_audit",
+    "conversion_touchpoints_strict",
+    "conversion_touchpoints",
+    "order_path_coverage_audit",
+    "orders_without_touchpoints",
+    "internal_admin_path_impact_audit",
+    "admin_domain_candidate_audit",
+    "same_session_multiple_order_audit",
+    "path_length_distribution_audit",
+    "path_closeout_summary_audit",
+    "phase2b_validation_summary",
+}
+
+CLOSEOUT_AUDIT_TABLES = {
+    "order_path_coverage_audit",
+    "orders_without_touchpoints",
+    "internal_admin_path_impact_audit",
+    "admin_domain_candidate_audit",
+    "same_session_multiple_order_audit",
+    "path_length_distribution_audit",
+    "path_closeout_summary_audit",
+    "phase2b_validation_summary",
+}
 
 NEW_TABLES = (SOURCE_AUDIT_STEP.destination_table,) + tuple(
     step.destination_table for step in CREATION_STEPS
@@ -216,6 +258,7 @@ LOCAL_EXPORTS = {
     "admin_domain_candidate_audit": "phase2b_admin_domain_candidate_audit.csv",
     "same_session_multiple_order_audit": "phase2b_same_session_multiple_order_audit.csv",
     "path_length_distribution_audit": "phase2b_path_length_distribution_audit.csv",
+    "path_closeout_summary_audit": "phase2b_path_closeout_summary_audit.csv",
     "phase2b_validation_summary": "phase2b_validation_summary.csv",
 }
 
@@ -294,7 +337,7 @@ def render_source_resolution(config: Phase2BConfig) -> str:
 
 def render_mapping_struct(alias: str) -> str:
     template = (
-        ROOT / "sql" / "intermediate" / "channel_mapping_v1.sql"
+        ROOT / "sql" / "intermediate" / "channel_mapping_v2.sql"
     ).read_text(encoding="utf-8")
     return replace_placeholders(template, {"{{ROW_ALIAS}}": alias})
 
@@ -668,6 +711,8 @@ def run_phase2b(
     rebuild_derived: bool = False,
     rebuild_source: bool = False,
     rebuild_validation: bool = False,
+    closeout: bool = False,
+    closeout_audits: bool = False,
 ) -> None:
     import google.auth
     from google.cloud import bigquery
@@ -687,14 +732,26 @@ def run_phase2b(
         raise ValueError("--rebuild-source requires --execute --resume")
     if rebuild_validation and not (execute and resume):
         raise ValueError("--rebuild-validation requires --execute --resume")
-    if rebuild_validation and (rebuild_source or rebuild_derived):
+    if closeout and not (execute and resume):
+        raise ValueError("--closeout requires --execute --resume")
+    if closeout_audits and not (execute and resume):
+        raise ValueError("--closeout-audits requires --execute --resume")
+    if rebuild_validation and (
+        rebuild_source or rebuild_derived or closeout or closeout_audits
+    ):
         raise ValueError(
             "--rebuild-validation cannot be combined with a broader rebuild option"
         )
+    if closeout and (rebuild_source or rebuild_derived or closeout_audits):
+        raise ValueError("--closeout cannot be combined with another rebuild option")
     if resume:
         if not execute:
             raise ValueError("--resume requires --execute")
-        completed_creation = _completed_creation_prefix(client, config)
+        completed_creation = (
+            set()
+            if closeout or closeout_audits
+            else _completed_creation_prefix(client, config)
+        )
         records = read_cost_log()
     else:
         _validate_fresh_targets(client, config)
@@ -748,6 +805,24 @@ def run_phase2b(
 
     rebuilding = False
     for step in CREATION_STEPS:
+        if closeout_audits:
+            if step.destination_table not in CLOSEOUT_AUDIT_TABLES:
+                print(f"{step.query_id}: close-out audit rebuild; skipped")
+                continue
+            effective_step = replace(step, write_mode="replace")
+            _run_step(client, config, effective_step, records)
+            continue
+        if closeout:
+            if step.destination_table not in CLOSEOUT_TABLES:
+                print(f"{step.query_id}: close-out rebuild; skipped")
+                continue
+            effective_step = (
+                replace(step, write_mode="replace")
+                if _table_exists(client, config.table_id(step.destination_table))
+                else step
+            )
+            _run_step(client, config, effective_step, records)
+            continue
         if rebuild_validation:
             if step.destination_table != "phase2b_validation_summary":
                 print(f"{step.query_id}: validation-only rebuild; skipped")
@@ -815,6 +890,22 @@ def main() -> int:
         action="store_true",
         help="Replace only the Phase 2B validation summary after adding checks.",
     )
+    parser.add_argument(
+        "--closeout",
+        action="store_true",
+        help=(
+            "Apply the approved Phase 2B admin-host and conversion-Session "
+            "close-out rules, replacing only derived Phase 2B targets."
+        ),
+    )
+    parser.add_argument(
+        "--closeout-audits",
+        action="store_true",
+        help=(
+            "Replace only close-out coverage, impact, path-summary, and "
+            "validation audits after an audit-only correction."
+        ),
+    )
     args = parser.parse_args()
     run_phase2b(
         load_config(),
@@ -823,6 +914,8 @@ def main() -> int:
         args.rebuild_derived,
         args.rebuild_source,
         args.rebuild_validation,
+        args.closeout,
+        args.closeout_audits,
     )
     return 0
 

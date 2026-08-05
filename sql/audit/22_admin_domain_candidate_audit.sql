@@ -1,43 +1,29 @@
-WITH candidate_sessions AS (
-  SELECT
-    session_key,
-    user_pseudo_id,
-    source_resolution_tier,
-    resolved_source,
-    resolved_medium,
-    channel,
-    mapping_version
-  FROM `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.session_touchpoints`
-  WHERE resolved_source_host = 'moma.corp.google.com'
-),
-candidate_assignments AS (
-  SELECT
-    candidate_sessions.session_key,
-    COUNT(DISTINCT conversion_touchpoints.order_key) AS affected_order_count,
-    COUNT(conversion_touchpoints.order_key) AS touchpoint_row_count
-  FROM candidate_sessions
-  LEFT JOIN `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.conversion_touchpoints`
-    AS conversion_touchpoints
-    USING (session_key)
-  GROUP BY candidate_sessions.session_key
-)
+-- Compatibility audit table: moma is no longer a candidate. Its approved
+-- exact-host exclusion and before/after path impact are recorded here.
 SELECT
-  'moma.corp.google.com' AS candidate_host,
-  candidate_sessions.source_resolution_tier,
-  candidate_sessions.resolved_source,
-  candidate_sessions.resolved_medium,
-  candidate_sessions.channel,
-  COUNT(*) AS session_count,
-  COUNT(DISTINCT candidate_sessions.user_pseudo_id) AS user_count,
-  SUM(candidate_assignments.affected_order_count) AS affected_order_count,
-  SUM(candidate_assignments.touchpoint_row_count) AS touchpoint_row_count,
-  'AUDIT_ONLY_NOT_EXCLUDED' AS decision_status,
-  candidate_sessions.mapping_version
-FROM candidate_sessions
-INNER JOIN candidate_assignments USING (session_key)
-GROUP BY
-  candidate_sessions.source_resolution_tier,
-  candidate_sessions.resolved_source,
-  candidate_sessions.resolved_medium,
-  candidate_sessions.channel,
-  candidate_sessions.mapping_version
+  admin_host,
+  affected_session_count AS session_count,
+  affected_user_count AS user_count,
+  retained_session_count_after_exclusion,
+  attribution_eligible_session_count_after_exclusion,
+  strict_touchpoint_rows_before_exclusion,
+  strict_admin_touchpoint_rows_after_exclusion,
+  strict_orders_before_exclusion,
+  strict_order_revenue_before_exclusion,
+  strict_orders_covered_after_exclusion,
+  strict_order_revenue_covered_after_exclusion,
+  strict_orders_lost_after_exclusion,
+  strict_order_revenue_lost_after_exclusion,
+  revised_touchpoint_rows_before_exclusion,
+  revised_admin_touchpoint_rows_after_exclusion,
+  revised_orders_before_exclusion,
+  revised_order_revenue_before_exclusion,
+  revised_orders_covered_after_exclusion,
+  revised_order_revenue_covered_after_exclusion,
+  revised_orders_lost_after_exclusion,
+  revised_order_revenue_lost_after_exclusion,
+  decision_status,
+  mapping_version,
+  path_definition_version
+FROM `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.internal_admin_path_impact_audit`
+WHERE admin_host = 'moma.corp.google.com'

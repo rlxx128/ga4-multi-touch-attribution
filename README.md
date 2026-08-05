@@ -10,12 +10,13 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 2B created and validated the approved Session-source, channel, and
-conversion-path layers. The model retains 360,129 unique Sessions and exactly
-4,466 eligible deduplicated orders; 4,043 orders have 9,172 eligible conversion
-touchpoints and 423 unmatched orders are explicitly reported. All 34 Phase 2B
-checks pass. Work is stopped before Phase 3: no attribution model or credit
-allocation has been created. See `reports/phase2b_core_data_model.md`.
+Phase 2B close-out created and validated the approved Session-source, admin,
+strict-path, and revised conversion-path layers. The model retains 360,129 unique
+Sessions and exactly 4,466 eligible deduplicated orders. The accepted historical
+baseline is 4,043 covered / 423 unmatched orders; the revised explicit
+conversion-Session exception covers 4,457 orders and leaves 9 unmatched. All 70
+close-out checks pass. Work is stopped before Phase 3: no attribution model or
+credit allocation has been created. See `reports/phase2b_core_data_model.md`.
 
 ## Data source
 
@@ -144,10 +145,12 @@ documented in `docs/data_dictionary.md` and `docs/methodology.md`.
   first-user acquisition is retained only as an explicitly labelled fallback.
 - Missing-source referral media are retained as Referral with a quality flag;
   they do not identify a specific referring website.
-- `analytics.google.com` is excluded from marketing paths, while
-  `moma.corp.google.com` remains an audit-only unresolved candidate.
-- 423 eligible orders have no Session after the previous-order boundary and are
-  excluded from later attribution unless the owner changes the path definition.
+- Exact hosts `analytics.google.com` and `moma.corp.google.com` are retained as
+  Internal/Admin Sessions but excluded from attribution paths.
+- The current order's own conversion Session can cross the previous-order
+  boundary only through an explicit, validated exception flag.
+- Nine eligible orders have no remaining attribution-eligible touchpoint after
+  Internal/Admin exclusion.
 - The sample does not provide complete reliable channel spend, so future budget
   work will be a parameterized scenario rather than actual ROAS estimation.
 - Descriptive attribution does not estimate causal incrementality.

@@ -25,10 +25,10 @@ FROM UNNEST([
   ),
   STRUCT(
     3,
-    'internal_admin_candidate',
+    'internal_admin',
     'normalized_host',
     'moma.corp.google.com',
-    'AUDIT_ONLY_NOT_EXCLUDED',
-    'Report observed and order impact before any future exclusion decision.'
+    'APPROVED',
+    'Retain the Session as Internal/Admin but exclude it from attribution paths.'
   )
 ])

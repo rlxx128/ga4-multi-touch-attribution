@@ -4,7 +4,7 @@ Last updated: 2026-08-06
 
 ## Current implementation status
 
-Phase 2B is implemented and validated. The implemented scope ends at approved
+Phase 2B close-out is implemented and validated. The implemented scope ends at approved
 Session source resolution, mutually exclusive channel classification, and
 conversion-cycle touchpoints. No attribution model or credit allocation has
 been implemented.
@@ -59,15 +59,17 @@ native event-level evidence.
 
 ## Administrative traffic and channel mapping
 
-`analytics.google.com` Sessions are retained with
-`is_internal_admin_traffic = TRUE`, an explicit reason, no marketing channel,
-and `is_marketing_eligible = FALSE`. They are excluded only when constructing
-marketing conversion paths. `moma.corp.google.com` is labelled as an audit-only
-candidate and remains marketing-eligible until a later owner decision. No broad
-`google.com` exclusion is used.
+`analytics.google.com` and `moma.corp.google.com` are matched only by exact
+normalized host equality. Their Sessions retain original source fields and are
+labelled `channel = 'Internal/Admin'`, `is_internal_admin_traffic = TRUE`, and
+`is_attribution_eligible = FALSE`, with a host-specific reason. They remain in
+`session_touchpoints` but are excluded from both strict and revised conversion
+paths. No broad `google.com` exclusion is used, and an order remains covered
+when another eligible marketing touchpoint exists.
 
-For eligible Sessions, mapping is a single ordered CASE expression with version
-`phase2b_channel_v1_20260806`. The first matching rule wins:
+Mapping is a single ordered CASE expression with version
+`phase2b_channel_v2_20260806`. Internal/Admin interception occurs first; for
+attribution-eligible Sessions the first matching marketing rule wins:
 
 1. Direct
 2. Paid Social
@@ -89,26 +91,39 @@ are intercepted before the marketing mapping.
 
 ## Conversion-cycle construction
 
-Orders are sequenced within each user by `order_ts` and `order_key`. For an
-order, an eligible touchpoint must:
+Orders are sequenced within each user by `order_ts` and `order_key`.
+`conversion_touchpoints_strict` preserves the strict rule after applying both
+approved admin exclusions. A strict touchpoint must:
 
 - have the same `user_pseudo_id`;
 - start at or before the order timestamp;
 - start no earlier than 30 days before the order;
 - start strictly after the previous order timestamp when a previous order
   exists;
-- be marketing-eligible and have one approved channel.
+- be attribution-eligible, not Internal/Admin, and have one approved marketing
+  channel.
+
+The primary `conversion_touchpoints` adds one narrowly scoped alternative. The
+Session must be the current order's own `conversion_session_key`, start at or
+before the order, remain within 30 days, and be attribution-eligible. It may
+start on or before the previous-order timestamp. No other Session can cross that
+boundary. Rows are labelled `STANDARD_CONVERSION_CYCLE` or
+`CURRENT_CONVERSION_SESSION_EXCEPTION`; the latter also sets
+`is_same_session_multi_order_exception = TRUE`.
 
 All distinct eligible Sessions, including Direct, are retained. Touchpoints are
 ordered by Session start and Session key. Path length is the number of retained
-Sessions for the order. The strict previous-order boundary makes cycles
-disjoint, and validation requires a Session to appear in at most one order
-cycle. Equal-timestamp orders are deterministically sequenced and reported as
-an exception condition rather than silently sharing a path.
+Sessions for the order. Strict paths remain disjoint. A Session can appear for
+multiple revised orders only when every later assignment is the explicitly
+flagged current-conversion-Session exception.
 
 Orders with no retained touchpoint are kept in `orders_without_touchpoints`
 with a specific diagnostic reason. Administrative impact is measured both
 before and after its exclusion.
+
+The accepted pre-close-out result is reconstructed in the coverage audit as a
+historical baseline of 4,043 covered and 423 unmatched orders. It is not used as
+the primary close-out path table.
 
 ## Validation and query safety
 
@@ -118,7 +133,7 @@ bounded by `_TABLE_SUFFIX`. Phase 2B validation covers Session and order counts,
 key uniqueness, source-tier reconciliation, internal-domain exclusion, Direct
 and Unknown evidence, medium-only quality, channel validity and uniqueness,
 admin-path exclusion, Creator Academy and Google inference exceptions, temporal
-path boundaries, unmatched-order reconciliation, Session reuse, and the absence
+path boundaries, unmatched-order reconciliation, explicit exception reuse, and the absence
 of attribution output tables.
 
 ## Later analytical workflow

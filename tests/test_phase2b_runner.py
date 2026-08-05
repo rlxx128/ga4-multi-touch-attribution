@@ -6,6 +6,7 @@ from scripts.run_phase2b import (
     CREATION_STEPS,
     MAPPING_VERSION,
     NEW_TABLES,
+    PATH_DEFINITION_VERSION,
     REPLACED_TABLES,
     RESOLUTION_VERSION,
     ROOT,
@@ -66,9 +67,10 @@ def test_medium_only_and_google_inference_fields_are_explicit(
     assert "source_resolution_tier = 'external_referrer'" in sql
 
 
-def test_mapping_is_ordered_and_admin_is_unmapped() -> None:
+def test_mapping_is_ordered_and_admin_is_explicitly_internal() -> None:
     sql = render_mapping_struct("candidate")
     assert sql.index("is_internal_admin_traffic") < sql.index("'Direct'")
+    assert "'Internal/Admin' AS channel" in sql
     channels = [
         "Direct",
         "Paid Social",
@@ -105,20 +107,36 @@ def test_every_executable_sql_renders_as_select(config: Phase2BConfig) -> None:
 
 
 def test_conversion_paths_enforce_all_boundaries() -> None:
-    sql = (
+    revised_sql = (
         ROOT / "sql" / "intermediate" / "05_conversion_touchpoints.sql"
     ).read_text()
-    assert "sessions.session_start_ts <= orders.order_ts" in sql
-    assert "TIMESTAMP_SUB(orders.order_ts, INTERVAL 30 DAY)" in sql
-    assert "sessions.session_start_ts > orders.previous_order_ts" in sql
-    assert "sessions.is_marketing_eligible" in sql
+    strict_sql = (
+        ROOT
+        / "sql"
+        / "intermediate"
+        / "05a_conversion_touchpoints_strict.sql"
+    ).read_text()
+    for sql in (strict_sql, revised_sql):
+        assert "sessions.session_start_ts <= orders.order_ts" in sql
+        assert "TIMESTAMP_SUB(orders.order_ts, INTERVAL 30 DAY)" in sql
+        assert "sessions.is_attribution_eligible" in sql
+        assert "NOT sessions.is_internal_admin_traffic" in sql
+    assert "sessions.session_start_ts > orders.previous_order_ts" in strict_sql
+    assert "sessions.session_key = orders.conversion_session_key" in revised_sql
+    assert "CURRENT_CONVERSION_SESSION_EXCEPTION" in revised_sql
+    assert "is_same_session_multi_order_exception" in revised_sql
 
 
-def test_marketing_eligibility_is_null_safe() -> None:
+def test_internal_admin_hosts_are_exact_and_attribution_ineligible() -> None:
     sql = (
         ROOT / "sql" / "intermediate" / "04_session_touchpoints.sql"
     ).read_text()
-    assert "COALESCE(resolved_source_host, '') != 'analytics.google.com'" in sql
+    assert "'analytics.google.com'" in sql
+    assert "'moma.corp.google.com'" in sql
+    assert "AS is_attribution_eligible" in sql
+    assert "'approved_admin_host:moma.corp.google.com'" in sql
+    assert "'Internal/Admin'" not in sql
+    assert "resolved_source_host = 'google.com'" not in sql
 
 
 def test_phase2b_targets_exclude_attribution_outputs() -> None:
@@ -139,7 +157,8 @@ def test_phase2b_targets_exclude_attribution_outputs() -> None:
 
 def test_versions_are_stable() -> None:
     assert RESOLUTION_VERSION == "phase2b_source_v1_20260806"
-    assert MAPPING_VERSION == "phase2b_channel_v1_20260806"
+    assert MAPPING_VERSION == "phase2b_channel_v2_20260806"
+    assert PATH_DEFINITION_VERSION == "phase2b_closeout_v1_20260806"
 
 
 @pytest.mark.parametrize(

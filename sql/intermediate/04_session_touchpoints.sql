@@ -3,14 +3,23 @@
 WITH prepared_sessions AS (
   SELECT
     session_source_candidates.*,
-    COALESCE(resolved_source_host, '') = 'analytics.google.com' AS is_internal_admin_traffic,
-    IF(
-      resolved_source_host = 'analytics.google.com',
-      'approved_admin_host:analytics.google.com',
-      NULL
-    ) AS internal_admin_reason,
-    COALESCE(resolved_source_host, '') = 'moma.corp.google.com' AS is_internal_admin_candidate,
-    COALESCE(resolved_source_host, '') != 'analytics.google.com' AS is_marketing_eligible
+    COALESCE(resolved_source_host, '') IN (
+      'analytics.google.com',
+      'moma.corp.google.com'
+    ) AS is_internal_admin_traffic,
+    CASE LOWER(COALESCE(resolved_source_host, ''))
+      WHEN 'analytics.google.com' THEN 'approved_admin_host:analytics.google.com'
+      WHEN 'moma.corp.google.com' THEN 'approved_admin_host:moma.corp.google.com'
+    END AS internal_admin_reason,
+    FALSE AS is_internal_admin_candidate,
+    COALESCE(resolved_source_host, '') NOT IN (
+      'analytics.google.com',
+      'moma.corp.google.com'
+    ) AS is_marketing_eligible,
+    COALESCE(resolved_source_host, '') NOT IN (
+      'analytics.google.com',
+      'moma.corp.google.com'
+    ) AS is_attribution_eligible
   FROM `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.session_source_candidates`
     AS session_source_candidates
 ),
@@ -46,9 +55,10 @@ SELECT
   internal_admin_reason,
   is_internal_admin_candidate,
   is_marketing_eligible,
+  is_attribution_eligible,
   mapping.channel AS channel,
   mapping.priority AS mapping_rule_priority,
   mapping.rule_name AS mapping_rule_name,
-  'phase2b_channel_v1_20260806' AS mapping_version,
+  'phase2b_channel_v2_20260806' AS mapping_version,
   resolution_version
 FROM mapped_sessions

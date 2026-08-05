@@ -6,7 +6,10 @@ WITH before_prepared AS (
     before_resolved_source_host AS resolved_source_host,
     before_resolved_source_reg_domain AS resolved_source_reg_domain,
     before_source_resolution_tier AS source_resolution_tier,
-    before_resolved_source_host = 'analytics.google.com' AS is_internal_admin_traffic
+    COALESCE(before_resolved_source_host, '') IN (
+      'analytics.google.com',
+      'moma.corp.google.com'
+    ) AS is_internal_admin_traffic
   FROM `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.source_reprocessing_session_audit`
     AS source_reprocessing_session_audit
 ),
@@ -38,7 +41,7 @@ SELECT
   resolution_changed,
   COUNT(*) AS session_count,
   'phase2b_source_v1_20260806' AS resolution_version,
-  'phase2b_channel_v1_20260806' AS mapping_version
+  'phase2b_channel_v2_20260806' AS mapping_version
 FROM joined_results
 GROUP BY
   before_source_resolution_tier,

@@ -10,7 +10,7 @@ represent the actual business performance of Google Merchandise Store.
 
 | Decision | Confirmed value | Scope | Confirmed on |
 |---|---|---|---|
-| Current phase | Phase 2B executed and validated; stop before Phase 3 | No attribution output is approved | 2026-08-06 |
+| Current phase | Phase 2B close-out executed and validated; stop before Phase 3 | No attribution output is approved | 2026-08-06 |
 | GCP project | `ga4-multi-touch-attribution` | Configured execution project | 2026-08-03 |
 | BigQuery dataset | `ga4_attribution` | Existing dataset only | 2026-08-03 |
 | BigQuery location | `US` | Query jobs and destination tables | 2026-08-03 |
@@ -26,16 +26,17 @@ represent the actual business performance of Google Merchandise Store.
 | Session source priority | Earliest non-internal same-event tuple; earliest external referrer; non-internal first-user fallback; explicit Direct; Unknown | Rebuilt source candidates | 2026-08-06 |
 | Medium-only evidence | Retain null-source `referral` medium as Referral; label `source_missing_flag` and `source_quality = 'medium_only'` | Do not claim a specific referring website | 2026-08-06 |
 | Google referrer inference | External `www.google.com` referrer becomes Organic Search | Preserve raw referrer and label inference/tier | 2026-08-06 |
-| Internal admin traffic | `analytics.google.com` is internal/administrative | Retain Session, assign no channel, exclude from marketing conversion paths | 2026-08-06 |
+| Internal admin traffic | Exact normalized host match to `analytics.google.com` or `moma.corp.google.com` | Retain as `Internal/Admin`, preserve source fields, set `is_attribution_eligible = FALSE`, and never exclude all `google.com` | 2026-08-06 |
 | Creator Academy | `creatoracademy.youtube.com` maps to Referral | Explicit exception before ordinary YouTube social mapping | 2026-08-06 |
 | YouTube and paid social | Ordinary YouTube is Organic Social; explicit paid-social evidence is Paid Social | Paid Social remains a valid label even when unobserved | 2026-08-06 |
 | Direct and Unknown | Direct requires explicit `(direct)` source or `(none)` medium; missing reliable evidence remains Unknown | Never merge Unknown into Direct | 2026-08-06 |
-| Channel mapping | First-match-wins order: Direct, Paid Social, Paid Search, Display, Email, Affiliates, Organic Search, Organic Social, Referral, Unknown, Other | Version `phase2b_channel_v1_20260806` | 2026-08-06 |
+| Channel mapping | Internal/Admin interception, then first-match-wins marketing order: Direct, Paid Social, Paid Search, Display, Email, Affiliates, Organic Search, Organic Social, Referral, Unknown, Other | Version `phase2b_channel_v2_20260806` | 2026-08-06 |
 | Baseline lookback | 30 days | Conversion paths | 2026-08-05 |
-| Conversion cycle | Strictly after the previous order and through the current order | Disjoint order cycles | 2026-08-05 |
+| Strict conversion cycle | Strictly after the previous order and through the current order | Preserved as `conversion_touchpoints_strict` after both admin-host exclusions | 2026-08-06 |
+| Current conversion-Session exception | The current order's own `conversion_session_key` may cross the previous-order boundary while remaining at/before conversion and inside 30 days | Label every exception; no other historical Session can cross the boundary | 2026-08-06 |
 | Direct treatment | Retain Direct | Baseline paths | 2026-08-05 |
-| Repeated sessions | Retain every distinct Session; do not silently reuse a Session across cycles | Phase 2B paths | 2026-08-06 |
-| Same-Session multiple orders | Report separately and validate no path reuse | Phase 2B exception audit | 2026-08-06 |
+| Repeated sessions | Retain every distinct Session; reuse is permitted only for the explicitly flagged current-conversion-Session exception | Phase 2B close-out paths | 2026-08-06 |
+| Same-Session multiple orders | Report exception reuse separately; do not call approved exception assignments unqualified reuse violations | Phase 2B exception audit | 2026-08-06 |
 | Attribution interpretation | Descriptive only, never proof of causal incrementality | Entire project | Mandatory |
 
 ## Phase 2B executed evidence
@@ -45,9 +46,14 @@ represent the actual business performance of Google Merchandise Store.
 - `orders` remains exactly 4,466 eligible deduplicated orders.
 - All 70,820 storefront-affected provisional Sessions were re-resolved
   individually and reconciled.
-- `conversion_touchpoints` contains 9,172 eligible Session/order rows covering
-  4,043 orders; 423 orders are explicitly reported without a touchpoint.
-- All 34 Phase 2B validation checks passed.
+- The accepted pre-close-out historical baseline is preserved in audit evidence:
+  9,172 touchpoints, 4,043 covered orders, and 423 unmatched orders.
+- After both admin exclusions, `conversion_touchpoints_strict` contains 9,155
+  rows covering 4,035 orders.
+- Revised `conversion_touchpoints` contains 9,577 rows covering 4,457 orders;
+  422 of the historical 423 unmatched orders are recovered and 9 final unmatched
+  orders are explicitly reported.
+- All 70 Phase 2B close-out validation checks passed.
 - No First Click, Last Click, Last Non-direct, Linear, Time Decay, Markov,
   Shapley, ROAS, budget, or dashboard output was created.
 
@@ -58,7 +64,6 @@ path, exception, and query-cost results.
 
 | Decision | When required | Evidence / expected impact |
 |---|---|---|
-| Whether to exclude `moma.corp.google.com` as administrative traffic | Before changing Phase 2 paths or beginning final attribution inputs | Currently audit-only and not excluded: 77 Sessions, 67 users, 17 affected orders and 17 touchpoint rows. Exclusion would remove those rows and can change path composition. |
 | Phase 3 attribution implementation approval | Before any attribution table is created | The core paths pass validation, but no model has been approved for execution in this phase. |
 | Time-decay half-life | Before Time Decay implementation | Different half-lives change within-path credit allocation. |
 | Repeated-channel compression sensitivity | Phase 5 | Baseline retains every distinct Session; compression would change path length and some model weights. |
@@ -67,3 +72,18 @@ path, exception, and query-cost results.
 | Dashboard tool | Phase 6 | Decide after analytical tables are stable. |
 | Business recommendation language | Phase 6 | Keep attribution descriptive and propose an incrementality experiment. |
 | BigQuery table retention | Before the dataset's 60-day default expiry or long-term handoff | Changing expiration metadata requires separate approval. |
+
+## Phase 2B close-out amendment — 2026-08-06
+
+The owner approved `moma.corp.google.com` as a second exact-host Internal/Admin
+exception and approved the current conversion-Session boundary exception. The
+executed close-out found 77 moma Sessions and 67 users. Under revised temporal
+eligibility, moma contributed 18 pre-exclusion touchpoint rows across 16 orders
+with USD 1,455 of order revenue; after exclusion, 7 of those orders remain
+covered by other marketing touchpoints and 9 orders with USD 622 remain
+unmatched.
+
+The conversion-Session exception adds 422 flagged touchpoints over 236 Sessions.
+Those Sessions may appear across multiple orders only through the explicit
+exception. Unapproved historical Session assignments, duplicate order/Session
+rows, post-conversion rows, and lookback violations are all zero.

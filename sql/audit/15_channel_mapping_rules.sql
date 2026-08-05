@@ -4,7 +4,7 @@ SELECT
   rule_name,
   rule_description,
   'APPROVED' AS decision_status,
-  'phase2b_channel_v1_20260806' AS mapping_version
+  'phase2b_channel_v2_20260806' AS mapping_version
 FROM UNNEST([
   STRUCT(1 AS priority, 'Direct' AS channel, 'direct_explicit' AS rule_name, 'Explicit Direct tier, (direct) source, or (none) medium.' AS rule_description),
   STRUCT(2, 'Paid Social', 'paid_social', 'Explicit paid-social medium, or social source with an approved paid medium.'),

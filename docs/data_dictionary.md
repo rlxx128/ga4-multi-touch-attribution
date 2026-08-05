@@ -4,7 +4,7 @@ Last updated: 2026-08-06
 
 ## Current implementation status
 
-Phase 2B has created or rebuilt the approved core Session and conversion-path
+Phase 2B close-out has created or rebuilt the approved core Session and conversion-path
 layers in `ga4-multi-touch-attribution.ga4_attribution`. All tables inherit the
 existing dataset's 60-day default table expiration. No attribution-result or
 model-comparison table exists.
@@ -68,48 +68,61 @@ Allowed mutually exclusive tiers are `event_level_source`,
   referrer, and version fields required by path construction.
 - Administrative fields: `is_internal_admin_traffic`,
   `internal_admin_reason`, `is_internal_admin_candidate`,
-  `is_marketing_eligible`.
+  `is_marketing_eligible`, `is_attribution_eligible`.
 - Mapping fields: `channel`, `mapping_rule_priority`, `mapping_rule_name`,
   `mapping_version`.
 
-Approved admin Sessions remain in this table but have null `channel` and are not
-marketing-eligible. Every marketing-eligible Session has exactly one approved
-channel.
+Approved exact-host admin Sessions remain in this table with original source
+fields and `channel = 'Internal/Admin'`; they are not attribution-eligible.
+Every Session has exactly one channel.
+
+### `conversion_touchpoints_strict`
+
+- Grain: one strictly eligible Session per order conversion cycle.
+- Validated rows: 9,155 for 4,035 covered orders after both admin exclusions.
+- Applies the 30-day window and strict previous-order boundary.
+- `touchpoint_eligibility_rule` is always `STANDARD_CONVERSION_CYCLE` and
+  `is_same_session_multi_order_exception` is always false.
+- Version: `path_definition_version = 'phase2b_strict_v1_20260806'`.
 
 ### `conversion_touchpoints`
 
 - Grain: one eligible Session per order conversion cycle.
-- Validated rows: 9,172 for 4,043 covered orders.
+- Validated rows: 9,577 for 4,457 covered orders.
 - Order fields: order identity, timestamp/date, revenue, previous-order
   timestamp, and same-timestamp order diagnostics.
 - Touchpoint fields: `session_key`, `ga_session_id`, `touchpoint_ts`,
   `session_end_ts`, `touchpoint_number`, `path_length`,
   `seconds_before_conversion`.
 - Source/channel fields: resolution tier, source/medium/campaign, source quality,
-  inference metadata, admin-candidate flag, channel, and mapping version.
+  inference metadata, channel, and mapping version.
+- Eligibility fields: `touchpoint_eligibility_rule`,
+  `is_same_session_multi_order_exception`, and `path_definition_version`.
 
-Touchpoints are at or before conversion, within 30 days, strictly after the
-previous order, and exclude approved internal admin Sessions.
+Touchpoints are at or before conversion, within 30 days, and exclude approved
+Internal/Admin Sessions. A row is either inside the strict cycle or is the
+current order's own flagged conversion-Session boundary exception.
 
 ### `orders_without_touchpoints`
 
 - Grain: one eligible order without a marketing touchpoint.
-- Validated rows: 423.
+- Validated rows: 9.
 - Includes order/cycle fields and counts of all user Sessions, Sessions on or
-  before the order, Sessions in the 30-day window, temporally eligible Sessions,
-  internal-admin Sessions, and marketing-eligible Sessions.
+  before the order, Sessions in the 30-day window, historical/strict/revised
+  eligibility, Internal/Admin Sessions, and attribution-eligible Sessions.
 - `exclusion_reason` records the first applicable path failure reason.
 
-All 423 current rows have `NO_SESSION_AFTER_PREVIOUS_ORDER`.
+All 9 current rows have
+`NO_ELIGIBLE_TOUCHPOINT_AFTER_INTERNAL_EXCLUSION`.
 
 ## Rule and audit tables
 
 ### `internal_domain_rules`
 
-- Grain: one approved or audit-only domain rule; 3 rows.
+- Grain: one approved domain rule; 3 rows.
 - Records the exact storefront registered-domain rule, approved
-  `analytics.google.com` admin host, and audit-only `moma.corp.google.com`
-  candidate with status and reason.
+  `analytics.google.com` admin host, and approved `moma.corp.google.com` admin
+  host with status and reason.
 
 ### `channel_mapping_rules`
 
@@ -153,38 +166,49 @@ All 423 current rows have `NO_SESSION_AFTER_PREVIOUS_ORDER`.
 ### `order_path_coverage_audit`
 
 - Grain: one eligible order; 4,466 rows.
-- Contains Session eligibility counts, conversion-touchpoint count, coverage
-  before/after admin exclusion, and coverage-loss flag.
+- Contains historical baseline, strict, and revised Session/path counts;
+  admin-exclusion counts; recovered/lost flags; and all coverage states.
 
 ### `internal_admin_path_impact_audit`
 
-- Grain: one approved admin-host summary; 1 row.
-- Reports affected Sessions/users/orders and order coverage before and after
-  exclusion.
+- Grain: one approved admin host plus an all-host total; 3 rows.
+- Reports retained Sessions/users, strict and revised pre-exclusion touchpoint
+  rows/orders/revenue, covered orders/revenue after exclusion, and lost
+  orders/revenue.
 
 ### `admin_domain_candidate_audit`
 
-- Grain: one observed tuple for `moma.corp.google.com`; 1 row.
-- Reports tier, source, medium, channel, Sessions, users, affected orders,
-  touchpoint rows, and `AUDIT_ONLY_NOT_EXCLUDED` status.
+- Compatibility table with one approved `moma.corp.google.com` row.
+- Reports its exact before/after exclusion metrics and
+  `APPROVED_EXACT_HOST_INTERNAL_ADMIN` status.
 
 ### `same_session_multiple_order_audit`
 
-- Grain: one conversion Session associated with multiple orders; 236 rows.
-- Contains order counts/timestamps/keys, assigned-path order count, and
-  `session_reuse_violation`.
+- Grain: one revised-path Session assigned to multiple orders; 236 rows.
+- Contains strict/revised assignment counts, standard and exception counts,
+  mismatch/unapproved counts, and the explicit-approval flag. The legacy
+  `session_reuse_violation` column remains only for existing clustering metadata
+  and is true exclusively for unapproved or mismatched assignments.
 
 ### `path_length_distribution_audit`
 
-- Grain: one observed path length; 13 rows for lengths 0 through 12.
+- Grain: one path variant and observed path length; 26 rows.
 - Contains order count/revenue, total count/revenue, and order/revenue shares.
+
+### `path_closeout_summary_audit`
+
+- Grain: one close-out summary; 1 row.
+- Reconciles the accepted historical baseline, strict-after-admin path, and
+  revised exception path for order/revenue coverage, touchpoints, average path
+  length, multi-touch rates, recovered orders, explicit exception reuse, and
+  internal-exclusion loss.
 
 ### `phase2b_validation_summary`
 
-- Grain: one Phase 2B check; 34 rows.
+- Grain: one Phase 2B close-out check; 70 rows.
 - Fields: `check_id`, `observed_value`, `expected_value`,
   `validation_status`.
-- Result: all 34 checks pass.
+- Result: all 70 checks pass.
 
 ## Historical Phase 2A review tables
 

@@ -1,9 +1,9 @@
--- Close-out conversion paths retain the strict cycle and add only the current
--- order's actual conversion Session when it crosses the previous-order boundary.
+-- Strict historical conversion cycles after applying both approved exact-host
+-- Internal/Admin exclusions. This table is the close-out comparison baseline.
 WITH order_cycles AS (
   {{ORDER_CYCLES_QUERY}}
 ),
-candidate_touchpoints AS (
+eligible_touchpoints AS (
   SELECT
     orders.order_key,
     orders.user_pseudo_id,
@@ -28,32 +28,16 @@ candidate_touchpoints AS (
     sessions.is_inferred_source,
     sessions.inference_rule,
     sessions.channel,
-    sessions.mapping_version,
-    orders.previous_order_ts IS NULL
-      OR sessions.session_start_ts > orders.previous_order_ts
-      AS is_standard_cycle_eligible,
-    sessions.session_key = orders.conversion_session_key
-      AS is_current_conversion_session
+    sessions.mapping_version
   FROM order_cycles AS orders
   INNER JOIN `{{TARGET_PROJECT}}.{{TARGET_DATASET}}.session_touchpoints` AS sessions
     ON orders.user_pseudo_id = sessions.user_pseudo_id
     AND sessions.session_start_ts <= orders.order_ts
     AND sessions.session_start_ts >= TIMESTAMP_SUB(orders.order_ts, INTERVAL 30 DAY)
+    AND (orders.previous_order_ts IS NULL OR sessions.session_start_ts > orders.previous_order_ts)
   WHERE sessions.is_attribution_eligible
     AND NOT sessions.is_internal_admin_traffic
     AND sessions.channel != 'Internal/Admin'
-),
-eligible_touchpoints AS (
-  SELECT
-    candidate_touchpoints.*,
-    CASE
-      WHEN is_standard_cycle_eligible THEN 'STANDARD_CONVERSION_CYCLE'
-      ELSE 'CURRENT_CONVERSION_SESSION_EXCEPTION'
-    END AS touchpoint_eligibility_rule,
-    NOT is_standard_cycle_eligible AND is_current_conversion_session
-      AS is_same_session_multi_order_exception
-  FROM candidate_touchpoints
-  WHERE is_standard_cycle_eligible OR is_current_conversion_session
 ),
 numbered_touchpoints AS (
   SELECT
@@ -93,7 +77,7 @@ SELECT
   inference_rule,
   channel,
   mapping_version,
-  touchpoint_eligibility_rule,
-  is_same_session_multi_order_exception,
-  'phase2b_closeout_v1_20260806' AS path_definition_version
+  'STANDARD_CONVERSION_CYCLE' AS touchpoint_eligibility_rule,
+  FALSE AS is_same_session_multi_order_exception,
+  'phase2b_strict_v1_20260806' AS path_definition_version
 FROM numbered_touchpoints
