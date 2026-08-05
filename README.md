@@ -10,9 +10,11 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 0 establishes the repository, local configuration examples, dependency
-manifest, environment diagnostics, and a bounded read-only BigQuery connection
-test. No analytical tables or attribution models are created in this phase.
+Phase 1 completed a bounded, read-only audit of source schema, date coverage,
+events, purchase quality, identifiers, revenue, and traffic-source availability.
+No analytical tables or attribution models have been created. Phase 2 remains
+blocked until the owner reviews the audit and approves the required business
+definitions. See `reports/phase1_data_audit.md`.
 
 ## Data source
 

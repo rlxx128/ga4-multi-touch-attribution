@@ -33,6 +33,7 @@ temp/
 *.tmp
 *.temp
 *.log
+*.csv
 
 # OS and editor files
 .DS_Store

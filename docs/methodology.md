@@ -1,12 +1,13 @@
 # Planned Methodology
 
-Last updated: 2026-08-03
+Last updated: 2026-08-04
 
 ## Current implementation status
 
-No attribution model has been implemented yet. The project is in Phase 0, so
-this document describes the proposed workflow and analytical guardrails rather
-than completed analysis or findings.
+No attribution model has been implemented. Phase 1 completed the read-only data
+audit and produced an evidence-based decision request. Phase 2 must not begin
+until the owner approves the conversion, order, revenue, session-key,
+traffic-source priority, and channel-mapping gates documented in the audit.
 
 ## Planned analytical workflow
 
@@ -88,4 +89,3 @@ All planned attribution methods are descriptive. Neither rule-based credit nor
 Markov removal effects prove that a channel caused incremental conversions or
 revenue. A causal budget decision would require an additional incrementality
 experiment or another defensible causal design.
-
