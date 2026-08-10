@@ -1,13 +1,14 @@
 # Methodology
 
-Last updated: 2026-08-06
+Last updated: 2026-08-09
 
 ## Current implementation status
 
-Phase 2B close-out is implemented and validated. The implemented scope ends at approved
-Session source resolution, mutually exclusive channel classification, and
-conversion-cycle touchpoints. No attribution model or credit allocation has
-been implemented.
+Phase 3 rule-based attribution is implemented and validated on the finalized
+Phase 2B revised conversion paths. The implemented scope includes First Click,
+Last Click, Last Non-direct Click, Linear, seven-day Time Decay, reconciliation,
+and channel-level model comparison. Markov and all later analyses remain out of
+scope.
 
 ## Core event and order definitions
 
@@ -125,6 +126,34 @@ The accepted pre-close-out result is reconstructed in the coverage audit as a
 historical baseline of 4,043 covered and 423 unmatched orders. It is not used as
 the primary close-out path table.
 
+## Phase 3 rule-based attribution
+
+The sole primary attribution input is `conversion_touchpoints`, version
+`phase2b_closeout_v1_20260806`. The 9,577 retained Session touchpoints represent
+4,457 attributable orders and USD 308,208.00. The 9 orders in
+`orders_without_touchpoints`, representing USD 622.00, are excluded from all
+models but retained in reconciliation reporting.
+
+Weights are first calculated at touchpoint grain. Repeated Sessions and repeated
+channels are not compressed. The final `attribution_results` table aggregates
+touchpoint credit to `order_key x model x channel`:
+
+- First Click assigns 1 to `touchpoint_number = 1`.
+- Last Click assigns 1 to `touchpoint_number = path_length`.
+- Last Non-direct Click assigns 1 to the latest channel not exactly `Direct`.
+  Unknown remains eligible; an all-Direct path falls back to the final Direct
+  touchpoint.
+- Linear assigns `1 / path_length` to every retained Session.
+- Time Decay calculates `0.5 ^ (seconds_before_conversion / 604800)` and then
+  divides each raw weight by the order's raw-weight total.
+
+For every model, `attributed_conversion` equals the normalized attribution
+weight and `attributed_revenue` equals `order_revenue_usd` multiplied by that
+weight. Within every order and model, conversion credit sums to 1 and attributed
+revenue reconciles to order revenue within the approved numerical tolerance.
+These allocations are descriptive and are not estimates of causal
+incrementality.
+
 ## Validation and query safety
 
 Every executable BigQuery query is dry-run first and uses the configured
@@ -134,15 +163,18 @@ key uniqueness, source-tier reconciliation, internal-domain exclusion, Direct
 and Unknown evidence, medium-only quality, channel validity and uniqueness,
 admin-path exclusion, Creator Academy and Google inference exceptions, temporal
 path boundaries, unmatched-order reconciliation, explicit exception reuse, and the absence
-of attribution output tables.
+of attribution output tables. Phase 3 first reruns the 70-check prerequisite
+gate, then validates input versions/populations, exact model formulas, canonical
+grain uniqueness, all-Direct fallback, per-order and per-model conversion and
+revenue reconciliation, exclusions, channel comparison, and absence of
+later-phase outputs. All 46 Phase 3 checks pass.
 
 ## Later analytical workflow
 
-The next phase may implement deterministic rule-based attribution only after
-separate approval. Planned later models are First Click, Last Click, Last
-Non-direct, Linear, and Time Decay. Markov must wait until rule-based weights,
-conversion totals, and revenue totals reconcile. Non-converting paths require a
-separate owner decision before they can be used.
+The next phase may implement Markov attribution only after separate approval.
+The rule-based weights, conversion totals, and revenue totals now reconcile.
+Non-converting paths still require a separate owner decision before they can be
+used, and are not implied by Phase 3 completion.
 
 All future attribution is descriptive. Neither rule-based credit nor Markov
 removal effects establish causal incrementality; causal budget decisions require

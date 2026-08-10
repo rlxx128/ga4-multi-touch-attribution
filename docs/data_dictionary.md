@@ -1,13 +1,13 @@
 # Data Dictionary
 
-Last updated: 2026-08-06
+Last updated: 2026-08-09
 
 ## Current implementation status
 
-Phase 2B close-out has created or rebuilt the approved core Session and conversion-path
-layers in `ga4-multi-touch-attribution.ga4_attribution`. All tables inherit the
-existing dataset's 60-day default table expiration. No attribution-result or
-model-comparison table exists.
+Phase 3 has created and validated rule-based attribution outputs on the approved
+Phase 2B conversion-path layers in
+`ga4-multi-touch-attribution.ga4_attribution`. All tables inherit the existing
+dataset's 60-day default table expiration.
 
 ## Core tables
 
@@ -115,6 +115,39 @@ current order's own flagged conversion-Session boundary exception.
 All 9 current rows have
 `NO_ELIGIBLE_TOUCHPOINT_AFTER_INTERNAL_EXCLUSION`.
 
+## Phase 3 attribution tables
+
+### `attribution_results`
+
+- Grain: one `order_key`, model, and channel; validated rows: 27,409.
+- Order audit fields: `user_pseudo_id`, `order_key`, `transaction_id`,
+  `order_ts`, `order_date`, `order_revenue_usd`, and `path_length`.
+- Model fields: `model`, `channel`, `attribution_weight`,
+  `attributed_conversion`, and `attributed_revenue`.
+- Version fields: `mapping_version`, `path_definition_version`, and
+  `attribution_version = 'phase3_rule_attribution_v1_20260809'`.
+- `time_decay_half_life_days` is 7 only for Time Decay and null for the other
+  four models.
+
+Allowed models are First Click, Last Click, Last Non-direct Click, Linear, and
+Time Decay. Touchpoint-level weights for repeated instances of the same channel
+are summed before storage at the canonical grain.
+
+### `model_comparison`
+
+- Grain: one observed attribution channel; validated rows: 8.
+- Contains attributed conversions, attributed revenue, conversion share, and
+  revenue share for all five rule-based models.
+- Includes Last Click revenue deltas against First Click, Linear, and Time Decay.
+- Reconciles exactly to channel/model aggregates from `attribution_results`.
+
+### `phase3_validation_summary`
+
+- Grain: one Phase 3 validation check; validated rows: 46.
+- Fields: `check_id`, `observed_value`, `expected_value`, and
+  `validation_status`.
+- Result: all 46 checks pass after all 70 Phase 2B prerequisite checks pass.
+
 ## Rule and audit tables
 
 ### `internal_domain_rules`
@@ -219,6 +252,6 @@ mapping used by `session_touchpoints`.
 
 ## Not implemented
 
-`attribution_results`, `model_comparison`, and all First Click, Last Click, Last
-Non-direct, Linear, Time Decay, Markov, Shapley, ROAS, budget, and dashboard
-outputs are outside Phase 2B and do not exist.
+Markov, non-converting paths, lookback sensitivity, repeated-channel
+compression, bootstrap stability, Shapley, ROAS, budget, and dashboard outputs
+are not implemented.

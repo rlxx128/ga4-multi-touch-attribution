@@ -10,13 +10,14 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 2B close-out created and validated the approved Session-source, admin,
-strict-path, and revised conversion-path layers. The model retains 360,129 unique
-Sessions and exactly 4,466 eligible deduplicated orders. The accepted historical
-baseline is 4,043 covered / 423 unmatched orders; the revised explicit
-conversion-Session exception covers 4,457 orders and leaves 9 unmatched. All 70
-close-out checks pass. Work is stopped before Phase 3: no attribution model or
-credit allocation has been created. See `reports/phase2b_core_data_model.md`.
+Phase 3 rule-based attribution is implemented and validated on the finalized
+Phase 2B revised conversion paths. First Click, Last Click, Last Non-direct
+Click, Linear, and seven-day Time Decay each reconcile to 4,457 attributable
+orders and USD 308,208.00. Nine orders with USD 622.00 remain explicitly
+excluded, reconciling to the complete 4,466-order / USD 308,830.00 population.
+All 70 Phase 2B prerequisite checks and all 46 Phase 3 checks pass. Work is
+stopped before Phase 4 Markov attribution. See
+`reports/phase3_rule_based_attribution.md`.
 
 ## Data source
 
@@ -123,6 +124,22 @@ Recovery flags such as `--rebuild-source`, `--rebuild-derived`, and
 auditable rebuilds after an implementation correction and should not be used as
 ordinary first-run options.
 
+Run the create-only Phase 3 preflight:
+
+```powershell
+python scripts/run_phase3.py
+```
+
+After approval, create and validate the three Phase 3 outputs:
+
+```powershell
+python scripts/run_phase3.py --execute
+```
+
+The Phase 3 runner consumes `conversion_touchpoints`, dry-runs every query,
+enforces the 1,000,000,000-byte ceiling, and refuses to replace an existing
+Phase 3 output.
+
 ## Analytical phases
 
 1. Repository and environment
@@ -151,6 +168,10 @@ documented in `docs/data_dictionary.md` and `docs/methodology.md`.
   boundary only through an explicit, validated exception flag.
 - Nine eligible orders have no remaining attribution-eligible touchpoint after
   Internal/Admin exclusion.
+- Time Decay uses the approved fixed seven-day half-life; alternative half-lives
+  are outside Phase 3.
+- Last Non-direct excludes only explicit Direct. Unknown remains eligible, and
+  an all-Direct path falls back to its final Direct touchpoint.
 - The sample does not provide complete reliable channel spend, so future budget
   work will be a parameterized scenario rather than actual ROAS estimation.
 - Descriptive attribution does not estimate causal incrementality.

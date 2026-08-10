@@ -1,6 +1,6 @@
 # Decision Register
 
-Last updated: 2026-08-06
+Last updated: 2026-08-09
 
 This register separates owner-approved analytical definitions from unresolved
 choices. The public GA4 sample is used for portfolio analysis and does not
@@ -10,7 +10,7 @@ represent the actual business performance of Google Merchandise Store.
 
 | Decision | Confirmed value | Scope | Confirmed on |
 |---|---|---|---|
-| Current phase | Phase 2B close-out executed and validated; stop before Phase 3 | No attribution output is approved | 2026-08-06 |
+| Current phase | Phase 3 rule-based attribution executed and validated; stop before Phase 4 | No Markov or later-phase output is approved | 2026-08-09 |
 | GCP project | `ga4-multi-touch-attribution` | Configured execution project | 2026-08-03 |
 | BigQuery dataset | `ga4_attribution` | Existing dataset only | 2026-08-03 |
 | BigQuery location | `US` | Query jobs and destination tables | 2026-08-03 |
@@ -38,6 +38,10 @@ represent the actual business performance of Google Merchandise Store.
 | Repeated sessions | Retain every distinct Session; reuse is permitted only for the explicitly flagged current-conversion-Session exception | Phase 2B close-out paths | 2026-08-06 |
 | Same-Session multiple orders | Report exception reuse separately; do not call approved exception assignments unqualified reuse violations | Phase 2B exception audit | 2026-08-06 |
 | Attribution interpretation | Descriptive only, never proof of causal incrementality | Entire project | Mandatory |
+| Phase 3 primary input | `conversion_touchpoints` revised close-out path | Do not substitute `conversion_touchpoints_strict` | 2026-08-09 |
+| Time-decay half-life | 7 days, using `0.5 ^ (seconds_before_conversion / 604800)` and within-order normalization | Phase 3 baseline only; no alternative half-life | 2026-08-09 |
+| Last Non-direct | Latest channel not exactly Direct; Unknown remains eligible; all-Direct paths fall back to final Direct | No eligible order is dropped for being Direct-only | 2026-08-09 |
+| Phase 3 revenue allocation | Apply the same normalized attribution weight to one conversion and `order_revenue_usd` | Reconcile both measures within numerical tolerance | 2026-08-09 |
 
 ## Phase 2B executed evidence
 
@@ -60,12 +64,26 @@ represent the actual business performance of Google Merchandise Store.
 See `reports/phase2b_core_data_model.md` for the executed coverage, channel,
 path, exception, and query-cost results.
 
+## Phase 3 executed evidence
+
+- `attribution_results` contains 27,409 rows at the approved
+  `order_key x model x channel` grain.
+- `model_comparison` contains one row for each of 8 observed path channels.
+- All five models cover all 4,457 attributable orders and each reconciles to
+  4,457 attributed conversions and USD 308,208.00.
+- All 9 excluded orders and USD 622.00 remain outside every model and visible in
+  reconciliation, yielding 4,466 total orders and USD 308,830.00.
+- All 70 Phase 2B prerequisite checks and all 46 Phase 3 checks pass.
+- No Markov, non-converting-path, sensitivity, bootstrap, Shapley, budget, or
+  dashboard output was created.
+
+See `reports/phase3_rule_based_attribution.md` for executed model and channel
+results, validation, query cost, and limitations.
+
 ## Decisions still pending after Phase 2B
 
 | Decision | When required | Evidence / expected impact |
 |---|---|---|
-| Phase 3 attribution implementation approval | Before any attribution table is created | The core paths pass validation, but no model has been approved for execution in this phase. |
-| Time-decay half-life | Before Time Decay implementation | Different half-lives change within-path credit allocation. |
 | Repeated-channel compression sensitivity | Phase 5 | Baseline retains every distinct Session; compression would change path length and some model weights. |
 | Non-converting journey definition | Before conversion-plus-non-conversion Markov | Requires observation window, inactivity cutoff, path ending, repeat-journey, and right-boundary decisions. |
 | Simulated channel costs | Phase 6 | Use owner-supplied simulated parameters only; do not imply observed spend. |
