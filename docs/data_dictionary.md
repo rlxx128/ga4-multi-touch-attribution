@@ -1,13 +1,15 @@
 # Data Dictionary
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 ## Current implementation status
 
-Phase 3 has created and validated rule-based attribution outputs on the approved
-Phase 2B conversion-path layers in
-`ga4-multi-touch-attribution.ga4_attribution`. All tables inherit the existing
-dataset's 60-day default table expiration.
+Phase 3 and Phase 4 attribution outputs are created and validated on the
+approved Phase 2B conversion-path layers in
+`ga4-multi-touch-attribution.ga4_attribution`. The six Phase 4 tables use the
+approved 30-day Null definition and graph-state removal version
+`phase4_markov_30d_anderl_v2_20260811`. Existing tables inherit the dataset's
+60-day default expiration.
 
 ## Core tables
 
@@ -148,6 +150,67 @@ are summed before storage at the canonical grain.
   `validation_status`.
 - Result: all 46 checks pass after all 70 Phase 2B prerequisite checks pass.
 
+## Phase 4 Markov tables
+
+The following definitions are current validated BigQuery objects.
+
+### `markov_journeys`
+
+- Grain: one finalized Conversion journey, completed Null journey, or
+  excluded right-censored journey.
+- Identity/status: `journey_id`, `user_pseudo_id`, optional `order_key`,
+  `journey_status`, `outcome_state`, and `is_markov_included`.
+- Time: journey start, last activity, 30-day expiry, next purchase, and the
+  exclusive dataset-end boundary.
+- Path: ordered `channel_path`, ordered `session_key_path`, and Session count.
+- Diagnostics: left-boundary flag, mapping version, inactivity cutoff, and
+  journey-definition version.
+- Validated rows: 273,683, comprising 4,457 Conversion, 177,632 Null, and
+  91,594 right-censored journeys.
+- Only the 182,089 completed Conversion/Null rows have
+  `is_markov_included = TRUE`; right-censored rows are retained for audit and
+  excluded from transition estimation. The 77,918 left-boundary completed Null
+  rows remain included with the truncation flag.
+
+### `markov_transition_matrix`
+
+- Grain: one dense `from_state x to_state` matrix cell; validated rows: 144.
+- Fields include count, probability, absorbing/reachability flags, state order,
+  baseline Conversion probability, and Markov version.
+- The baseline has 12 states, retains observed self-transitions, and stores
+  explicit absorbing rows for Conversion and Null.
+- Transition probabilities use journey transition counts, not revenue weights.
+
+### `markov_removal_effects`
+
+- Grain: one observed channel; validated rows: 9.
+- Fields include baseline and removed Conversion probabilities, raw and
+  tolerance-adjusted effects, negative-effect flags, and version.
+- The versioned method removes the channel row/column and redirects every
+  remaining incoming probability for that channel to Null. Total validated
+  removal effect: `1.2126824577935318`.
+
+### `markov_attribution`
+
+- Grain: one observed channel with normalized Markov share; validated rows: 9.
+- Fields include attributed conversions/revenue, identical conversion/revenue
+  shares, baseline probability, total effect, and version.
+- Shares sum to one and reconcile to 4,457 conversions and USD 308,208.
+
+### `rule_markov_comparison`
+
+- Grain: one channel and model across the five Phase 3 models plus Markov;
+  validated rows: 54.
+- Includes attribution totals/share/rank and absolute/relative differences
+  versus Last Click.
+
+### `phase4_validation_summary`
+
+- Grain: one Phase 4 validation check spanning population,
+  right-censoring, overlap, state transitions, absorption, removal effects,
+  attribution reconciliation, comparison, and Phase 2B/3 regression.
+- Validated rows: 70; all checks pass.
+
 ## Rule and audit tables
 
 ### `internal_domain_rules`
@@ -252,6 +315,6 @@ mapping used by `session_touchpoints`.
 
 ## Not implemented
 
-Markov, non-converting paths, lookback sensitivity, repeated-channel
-compression, bootstrap stability, Shapley, ROAS, budget, and dashboard outputs
-are not implemented.
+Lookback sensitivity, repeated-channel compression, bootstrap stability,
+Shapley, ROAS, budget, and dashboard outputs are not implemented. They remain
+outside Phase 4 scope.

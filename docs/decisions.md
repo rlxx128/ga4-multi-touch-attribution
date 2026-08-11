@@ -1,6 +1,6 @@
 # Decision Register
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 This register separates owner-approved analytical definitions from unresolved
 choices. The public GA4 sample is used for portfolio analysis and does not
@@ -10,7 +10,7 @@ represent the actual business performance of Google Merchandise Store.
 
 | Decision | Confirmed value | Scope | Confirmed on |
 |---|---|---|---|
-| Current phase | Phase 3 rule-based attribution executed and validated; stop before Phase 4 | No Markov or later-phase output is approved | 2026-08-09 |
+| Current phase | Phase 4 Markov attribution closed out on `phase4-markov-attribution` | Six create-only outputs and all local/regression gates are validated; ready for merge review, with Phase 5 not started | 2026-08-11 |
 | GCP project | `ga4-multi-touch-attribution` | Configured execution project | 2026-08-03 |
 | BigQuery dataset | `ga4_attribution` | Existing dataset only | 2026-08-03 |
 | BigQuery location | `US` | Query jobs and destination tables | 2026-08-03 |
@@ -42,6 +42,13 @@ represent the actual business performance of Google Merchandise Store.
 | Time-decay half-life | 7 days, using `0.5 ^ (seconds_before_conversion / 604800)` and within-order normalization | Phase 3 baseline only; no alternative half-life | 2026-08-09 |
 | Last Non-direct | Latest channel not exactly Direct; Unknown remains eligible; all-Direct paths fall back to final Direct | No eligible order is dropped for being Direct-only | 2026-08-09 |
 | Phase 3 revenue allocation | Apply the same normalized attribution weight to one conversion and `order_revenue_usd` | Reconcile both measures within numerical tolerance | 2026-08-09 |
+| Phase 4 Null inactivity | 30 complete days measured from `session_end_ts`; split when the next Session starts at or after expiry | The 14-day alternative is deferred to Phase 5 | 2026-08-11 |
+| Phase 4 purchase boundary | A valid purchase at or before inactivity expiry makes the segmented journey converting, not Null | All valid orders remain temporal boundaries | 2026-08-11 |
+| Phase 4 observation boundary | Exclusive `2021-02-01 00:00:00 UTC`; Null expiry must be strictly earlier | Later candidates are right-censored and excluded from Markov input | 2026-08-11 |
+| Phase 4 left boundary | Retain journeys starting in the first 30 observed days with an explicit truncation flag | Do not claim fully observed pre-window history | 2026-08-11 |
+| Phase 4 Markov order and states | First order; retain Direct, Unknown, Other, repeated Sessions, repeated channels, and self-transitions | Conversion and Null are explicit absorbing states | 2026-08-11 |
+| Phase 4 removal semantics rejected | Remove every occurrence, reconnect predecessor and successor, then rebuild paths and probabilities | Executed and rejected: preserving every original Conversion/Null endpoint made removal probabilities invariant and effects numerical zero | 2026-08-11 |
+| Phase 4 removal semantics final | Anderl-style graph-state removal: independently remove each channel row/column from the original baseline graph and redirect every remaining `i -> C` probability to `i -> Null`; preserve all other probabilities without proportional renormalization | Structural dependency assumption; no channel substitution and no causal interpretation; version `phase4_markov_30d_anderl_v2_20260811` | 2026-08-11 |
 
 ## Phase 2B executed evidence
 
@@ -80,12 +87,50 @@ path, exception, and query-cost results.
 See `reports/phase3_rule_based_attribution.md` for executed model and channel
 results, validation, query cost, and limitations.
 
-## Decisions still pending after Phase 2B
+## Phase 4 removal-gate decision history
+
+- Finalized conversion paths remain 4,457 journeys, 3,705 users, 9,577
+  touchpoints, and USD 308,208 attributable revenue.
+- The approved 30-day segmentation produces 177,632 completed Null journeys
+  across 177,156 users and 229,522 Sessions.
+- Right censoring excludes 91,594 journeys and 117,470 Sessions; 77,918
+  completed Null journeys carry the left-boundary flag.
+- Conversion/Null Session overlap and Internal/Admin states are both zero.
+- The included 182,089 journeys produce 12 states and a
+  `0.024477041446765` Markov journey conversion proportion.
+- Reconnect removal leaves that probability unchanged for all nine channel
+  states. Effects range from zero to `4.440892098500626e-16`; their total is
+  `2.886579864025407e-15`, below the approved `1e-12` tolerance.
+- Normalization therefore fails as required. No `markov_journeys`, transition,
+  removal, attribution, comparison, or Phase 4 validation table was created.
+
+This result rejected the reconnect rule; it is preserved as an analytical
+lesson rather than concealed or treated as a numerical defect.
+
+## Phase 4 final executed evidence
+
+- The approved graph-state rule starts every removal from the original baseline
+  matrix, drops the selected channel row and column, and redirects its incoming
+  probability mass to Null.
+- The baseline Markov journey conversion probability remains
+  `0.02447704144676505` across 4,457 Conversion and 177,632 Null journeys.
+- All nine removal effects are finite and positive, with no zero or materially
+  negative effects; their sum is `1.2126824577935318`.
+- Normalized Markov shares sum to one and reconcile to 4,457 conversions and
+  USD 308,208 attributed revenue.
+- All six create-only Phase 4 outputs were created. All 70 Phase 4 checks pass,
+  along with the stored 70 Phase 2B and 46 Phase 3 checks.
+- Phase 2, Phase 2B, Phase 3, and finalized conversion-path tables were not
+  modified.
+
+See `reports/phase4_markov_attribution.md` for the executed evidence and
+channel-level results.
+
+## Decisions still pending
 
 | Decision | When required | Evidence / expected impact |
 |---|---|---|
 | Repeated-channel compression sensitivity | Phase 5 | Baseline retains every distinct Session; compression would change path length and some model weights. |
-| Non-converting journey definition | Before conversion-plus-non-conversion Markov | Requires observation window, inactivity cutoff, path ending, repeat-journey, and right-boundary decisions. |
 | Simulated channel costs | Phase 6 | Use owner-supplied simulated parameters only; do not imply observed spend. |
 | Dashboard tool | Phase 6 | Decide after analytical tables are stable. |
 | Business recommendation language | Phase 6 | Keep attribution descriptive and propose an incrementality experiment. |

@@ -1,14 +1,14 @@
 # Methodology
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 ## Current implementation status
 
-Phase 3 rule-based attribution is implemented and validated on the finalized
-Phase 2B revised conversion paths. The implemented scope includes First Click,
-Last Click, Last Non-direct Click, Linear, seven-day Time Decay, reconciliation,
-and channel-level model comparison. Markov and all later analyses remain out of
-scope.
+Phase 3 rule-based attribution remains implemented and validated on the
+finalized Phase 2B revised conversion paths. Phase 4 journey construction,
+first-order transition logic, graph-state removal, normalized attribution, and
+rule-model comparison are implemented. All six Phase 4 outputs exist and all
+70 Phase 4 checks pass.
 
 ## Core event and order definitions
 
@@ -154,6 +154,73 @@ revenue reconciles to order revenue within the approved numerical tolerance.
 These allocations are descriptive and are not estimates of causal
 incrementality.
 
+## Phase 4 journey and Markov gate
+
+Finalized `conversion_touchpoints` is the sole converting-path source. Each
+order becomes `Start -> channel(s) -> Conversion`; the Phase 4 process does not
+reconstruct conversion paths from the Session timeline.
+
+Non-converting Sessions are limited to attribution-eligible, non-admin rows.
+A journey starts after a valid purchase or at the first observed eligible
+Session. It splits when the next Session begins at or after 30 complete days
+from the previous `session_end_ts`, or when an intervening valid purchase has
+occurred. A purchase at or before inactivity expiry makes that segmented
+journey converting. Only the separately finalized conversion paths enter the
+Conversion population.
+
+The observation boundary is exclusive `2021-02-01 00:00:00 UTC`. A Null expiry
+must be strictly earlier, so a completed Null requires its full 30-day future
+horizon inside the observation window. Otherwise the candidate is
+right-censored, retained only as an audit row, and excluded from transition
+estimation. Journeys starting before `2020-12-01 00:00:00 UTC` remain included
+with an explicit left-boundary flag; the flag records incomplete pre-window
+history rather than a fully observed journey start.
+
+The executed population contains 4,457 Conversion journeys and 177,632 Null
+journeys. The Markov state sequence retains repeated Sessions and channels:
+
+```text
+Start -> channel(s) -> Conversion
+Start -> channel(s) -> Null
+```
+
+Every adjacent transition is counted once. Transition estimation is based on
+journey transition counts and is not revenue weighted. Conversion and Null
+receive explicit probability-one self-loops. The first-order absorption
+probability from Start is `0.024477041446765`, which reconciles to the Markov
+journey conversion proportion `4457 / (4457 + 177632)`.
+
+The original removal attempt deleted channel occurrences from paths,
+reconnected predecessor and successor, and rebuilt the matrix. It was rejected
+after execution because every journey retained its original Conversion or Null
+endpoint. The resulting total effect, `2.886579864025407e-15`, was numerical
+zero and the normalization gate correctly created no tables.
+
+The final approved Anderl-style removal algorithm operates on the baseline
+graph. For each channel `C` independently, it starts from the same original
+matrix, removes `C`'s row and column, and redirects every remaining state's
+original incoming probability for `C` to Null:
+
+```text
+P_removed(i, Null) = P_baseline(i, Null) + P_baseline(i, C)
+```
+
+Every other remaining transition probability is preserved and is not
+proportionally renormalized. Conversion and Null keep probability-one
+self-loops. Each reduced row must sum to one, every transient state must reach
+an absorber, and eventual Conversion probability is solved from Start.
+
+The counterfactual treats probability mass that would next enter the removed
+channel as non-converting. It does not model substitution by another channel.
+The executed effects are all finite and positive, sum to
+`1.2126824577935318`, and normalize to one. The global shares are applied to
+4,457 conversions and USD 308,208; consequently conversion and revenue shares
+are identical in this baseline.
+
+`Unknown` remains separate from Direct. It represents source evidence that
+remained unresolved after Phase 2B recovery; it is not a real marketing channel
+or a directly actionable budget target.
+
 ## Validation and query safety
 
 Every executable BigQuery query is dry-run first and uses the configured
@@ -167,14 +234,18 @@ of attribution output tables. Phase 3 first reruns the 70-check prerequisite
 gate, then validates input versions/populations, exact model formulas, canonical
 grain uniqueness, all-Direct fallback, per-order and per-model conversion and
 revenue reconciliation, exclusions, channel comparison, and absence of
-later-phase outputs. All 46 Phase 3 checks pass.
+later-phase outputs. All 46 Phase 3 checks pass. Phase 4 revalidated the stored
+70-check Phase 2B and 46-check Phase 3 gates plus current model populations
+before executing journey diagnostics. Its 70 checks validate the journey
+population, censoring, overlap, baseline transition matrix, absorption,
+removal effects, normalized attribution, comparison shape, and regressions.
+All pass.
 
 ## Later analytical workflow
 
-The next phase may implement Markov attribution only after separate approval.
-The rule-based weights, conversion totals, and revenue totals now reconcile.
-Non-converting paths still require a separate owner decision before they can be
-used, and are not implied by Phase 3 completion.
+Phase 4 is complete and stops for review before Phase 5 sensitivity work. The
+30-day Null population and graph-state removal semantics are both approved and
+versioned.
 
 All future attribution is descriptive. Neither rule-based credit nor Markov
 removal effects establish causal incrementality; causal budget decisions require

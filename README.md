@@ -10,14 +10,15 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 3 rule-based attribution is implemented and validated on the finalized
-Phase 2B revised conversion paths. First Click, Last Click, Last Non-direct
-Click, Linear, and seven-day Time Decay each reconcile to 4,457 attributable
-orders and USD 308,208.00. Nine orders with USD 622.00 remain explicitly
-excluded, reconciling to the complete 4,466-order / USD 308,830.00 population.
-All 70 Phase 2B prerequisite checks and all 46 Phase 3 checks pass. Work is
-stopped before Phase 4 Markov attribution. See
-`reports/phase3_rule_based_attribution.md`.
+Phase 4 is implemented and validated on the finalized Phase 2B conversion
+paths and approved 30-day Null population. The first-order Markov model uses
+Anderl-style graph-state channel removal: probability entering a removed
+channel is redirected to Null. All 70 Phase 4 checks pass, and the six
+create-only outputs contain the validated journey, transition, removal,
+attribution, comparison, and validation results. The earlier reconnect-path
+rule remains documented as a rejected analytical attempt because it produced
+invariant, zero removal effects. See `reports/phase4_markov_attribution.md` for
+executed results.
 
 ## Data source
 
@@ -140,6 +141,22 @@ The Phase 3 runner consumes `conversion_touchpoints`, dry-runs every query,
 enforces the 1,000,000,000-byte ceiling, and refuses to replace an existing
 Phase 3 output.
 
+Run the Phase 4 create-only preflight:
+
+```powershell
+python scripts/run_phase4.py
+```
+
+The approved execution command is:
+
+```powershell
+python scripts/run_phase4.py --execute
+```
+
+The execution performs population, transition, removal-effect, and
+normalization checks before creating persistent Phase 4 objects. It is
+create-only and now refuses to run again while the validated outputs exist.
+
 ## Analytical phases
 
 1. Repository and environment
@@ -172,6 +189,16 @@ documented in `docs/data_dictionary.md` and `docs/methodology.md`.
   are outside Phase 3.
 - Last Non-direct excludes only explicit Direct. Unknown remains eligible, and
   an all-Direct path falls back to its final Direct touchpoint.
+- The approved Phase 4 Null baseline uses 30 complete inactivity days and has
+  substantial right censoring: 91,594 candidates remain as audit rows but are
+  excluded from transition estimation.
+- The final graph-state removal rule redirects probability entering a removed
+  channel to Null. It does not model channel substitution and may overstate
+  structural dependency when another channel would replace the removed one.
+- The rejected reconnect-style rule is retained in the decision history: it
+  preserved original outcomes and therefore generated zero removal effects.
+- `Unknown` is source evidence left unresolved after Phase 2B recovery. It is
+  not a real marketing channel or a directly actionable budget target.
 - The sample does not provide complete reliable channel spend, so future budget
   work will be a parameterized scenario rather than actual ROAS estimation.
 - Descriptive attribution does not estimate causal incrementality.
