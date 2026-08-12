@@ -10,15 +10,14 @@ be interpreted as proof of causal incrementality.
 
 ## Current status
 
-Phase 4 is implemented and validated on the finalized Phase 2B conversion
-paths and approved 30-day Null population. The first-order Markov model uses
-Anderl-style graph-state channel removal: probability entering a removed
-channel is redirected to Null. All 70 Phase 4 checks pass, and the six
-create-only outputs contain the validated journey, transition, removal,
-attribution, comparison, and validation results. The earlier reconnect-path
-rule remains documented as a rejected analytical attempt because it produced
-invariant, zero removal effects. See `reports/phase4_markov_attribution.md` for
-executed results.
+Phase 5 sensitivity and stability analysis is implemented and validated on the
+immutable Phase 2B, Phase 3, and Phase 4 baselines. The approved matrix covers
+7/14/30-day conversion lookbacks, 14/30-day Null inactivity, consecutive
+channel compression, mixed-path Direct omission with Direct-only fallback, and
+a 500-replicate user-level cluster bootstrap using seed `20260812`. All 56
+Phase 5 checks pass. The top Markov ordering is robust, while Direct's share is
+materially dependent on path treatment. See
+`reports/phase5_sensitivity_stability.md` for executed results and limitations.
 
 ## Data source
 
@@ -156,6 +155,23 @@ python scripts/run_phase4.py --execute
 The execution performs population, transition, removal-effect, and
 normalization checks before creating persistent Phase 4 objects. It is
 create-only and now refuses to run again while the validated outputs exist.
+
+Run the Phase 5 create-only preflight:
+
+```powershell
+python scripts/run_phase5.py
+```
+
+The approved execution command is:
+
+```powershell
+python scripts/run_phase5.py --execute
+```
+
+Phase 5 reads only persisted prior-phase tables, dry-runs every SQL query,
+executes the bootstrap locally after one compact path extraction, verifies a
+before/after metadata fingerprint for every baseline table, and refuses to
+replace any Phase 5 output.
 
 ## Analytical phases
 

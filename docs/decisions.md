@@ -1,6 +1,6 @@
 # Decision Register
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 This register separates owner-approved analytical definitions from unresolved
 choices. The public GA4 sample is used for portfolio analysis and does not
@@ -10,7 +10,7 @@ represent the actual business performance of Google Merchandise Store.
 
 | Decision | Confirmed value | Scope | Confirmed on |
 |---|---|---|---|
-| Current phase | Phase 4 Markov attribution closed out on `phase4-markov-attribution` | Six create-only outputs and all local/regression gates are validated; ready for merge review, with Phase 5 not started | 2026-08-11 |
+| Current phase | Phase 5 sensitivity and stability implemented on `phase5-sensitivity-stability` | Six create-only outputs and all local/regression gates are validated; stopped before Phase 6 | 2026-08-12 |
 | GCP project | `ga4-multi-touch-attribution` | Configured execution project | 2026-08-03 |
 | BigQuery dataset | `ga4_attribution` | Existing dataset only | 2026-08-03 |
 | BigQuery location | `US` | Query jobs and destination tables | 2026-08-03 |
@@ -49,6 +49,11 @@ represent the actual business performance of Google Merchandise Store.
 | Phase 4 Markov order and states | First order; retain Direct, Unknown, Other, repeated Sessions, repeated channels, and self-transitions | Conversion and Null are explicit absorbing states | 2026-08-11 |
 | Phase 4 removal semantics rejected | Remove every occurrence, reconnect predecessor and successor, then rebuild paths and probabilities | Executed and rejected: preserving every original Conversion/Null endpoint made removal probabilities invariant and effects numerical zero | 2026-08-11 |
 | Phase 4 removal semantics final | Anderl-style graph-state removal: independently remove each channel row/column from the original baseline graph and redirect every remaining `i -> C` probability to `i -> Null`; preserve all other probabilities without proportional renormalization | Structural dependency assumption; no channel substitution and no causal interpretation; version `phase4_markov_30d_anderl_v2_20260811` | 2026-08-11 |
+| Phase 5 lookback comparison | Common cohort is primary; population-impact view remains visible | Prevents silent denominator changes; executed common cohort contains all 4,457 attributable orders | 2026-08-12 |
+| Phase 5 Direct sensitivity | Omit every Direct state from mixed-channel paths; retain Direct-only paths; preserve endpoints; do not compress newly adjacent states | Scenario-only Markov path transformation; distinct from Last Non-direct Click | 2026-08-12 |
+| Phase 5 repeated-channel sensitivity | Compress only consecutive identical channel states | Non-consecutive repeats and all journey endpoints remain unchanged | 2026-08-12 |
+| Phase 5 bootstrap | User-level clusters; sample with replacement; preserve every completed journey and multiplicity; 500 replicates; seed `20260812` | Rebuild matrix, removal effects, shares, and ranks locally; exclude right-censored journeys | 2026-08-12 |
+| Phase 5 ranking | Descending share, then channel name ascending solely for deterministic tie handling | Lexicographic order does not imply substantive superiority for tied channels | 2026-08-12 |
 
 ## Phase 2B executed evidence
 
@@ -126,11 +131,32 @@ lesson rather than concealed or treated as a numerical defect.
 See `reports/phase4_markov_attribution.md` for the executed evidence and
 channel-level results.
 
+## Phase 5 executed evidence
+
+- All 7 approved scenario definitions are recorded independently; each
+  deterministic sensitivity changes exactly one assumption.
+- The 7-, 14-, and 30-day lookbacks retain the same 4,457-order,
+  USD 308,208 common cohort. Average path length changes from 1.764 to 1.946 to
+  2.149 and multi-touch share from 38.16% to 43.17% to 47.86%.
+- The 14-day Null scenario includes 231,966 final Null journeys and excludes
+  42,017 right-censored journeys, versus 177,632 and 91,594 at 30 days.
+- Consecutive compression removes 17,914 states but changes no Markov rank or
+  share beyond floating-point precision.
+- Mixed-path Direct omission reduces Direct's Markov share from 12.70% to
+  3.97%; all nine full-state ranks remain ordered as in the baseline.
+- All 500 user-cluster bootstrap replicates succeed. Organic Search ranks first
+  in every replicate; Organic Search, Referral, and Unknown are Top 3 in every
+  replicate. Affiliates and Organic Social occasionally exchange ranks 7/8.
+- All 56 Phase 5 checks pass, including stored Phase 2B/3/4 regression gates,
+  scenario reconciliation, bootstrap accounting, and the unchanged-baseline
+  metadata fingerprint.
+
+See `reports/phase5_sensitivity_stability.md` for complete executed results.
+
 ## Decisions still pending
 
 | Decision | When required | Evidence / expected impact |
 |---|---|---|
-| Repeated-channel compression sensitivity | Phase 5 | Baseline retains every distinct Session; compression would change path length and some model weights. |
 | Simulated channel costs | Phase 6 | Use owner-supplied simulated parameters only; do not imply observed spend. |
 | Dashboard tool | Phase 6 | Decide after analytical tables are stable. |
 | Business recommendation language | Phase 6 | Keep attribution descriptive and propose an incrementality experiment. |

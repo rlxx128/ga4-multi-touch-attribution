@@ -202,6 +202,70 @@ def build_transition_model_streaming(
     return MarkovModel(states, counts, probabilities, reachable)
 
 
+def build_transition_model_from_counts(
+    states: Sequence[str],
+    transition_counts: np.ndarray,
+) -> MarkovModel:
+    """Build a validated model from an already aggregated transition matrix.
+
+    This is used by the Phase 5 cluster bootstrap so each replicate can reuse
+    sampled user-level transition counts without reconstructing every path.
+    ``states`` must contain ``Start`` first and the two absorbing states last.
+    """
+
+    normalized_states = tuple(str(state) for state in states)
+    if len(set(normalized_states)) != len(normalized_states):
+        raise ValueError("Markov states must be unique")
+    if len(normalized_states) < 3:
+        raise ValueError("A Markov model requires Start and two absorbing states")
+    if normalized_states[0] != START_STATE:
+        raise ValueError("Start must be the first state")
+    if normalized_states[-2:] != ABSORBING_STATES:
+        raise ValueError("Conversion and Null must be the final states")
+
+    counts = np.asarray(transition_counts)
+    expected_shape = (len(normalized_states), len(normalized_states))
+    if counts.shape != expected_shape:
+        raise ValueError(
+            f"Transition counts have shape {counts.shape}; expected {expected_shape}"
+        )
+    if not np.issubdtype(counts.dtype, np.integer):
+        if not np.all(np.isfinite(counts)) or not np.all(counts == np.floor(counts)):
+            raise ValueError("Transition counts must be finite integers")
+        counts = counts.astype(np.int64)
+    else:
+        counts = counts.astype(np.int64, copy=True)
+    if np.any(counts < 0):
+        raise ValueError("Transition counts cannot be negative")
+
+    probabilities = np.zeros(expected_shape, dtype=np.float64)
+    for index, state in enumerate(normalized_states):
+        if state in ABSORBING_STATES:
+            probabilities[index, index] = 1.0
+            continue
+        outgoing = int(counts[index].sum())
+        if outgoing <= 0:
+            raise ValueError(f"Transient state has no outgoing transitions: {state}")
+        probabilities[index] = counts[index] / outgoing
+
+    if not np.allclose(
+        probabilities.sum(axis=1), 1.0, atol=FLOATING_POINT_TOLERANCE
+    ):
+        raise ValueError("Transition-matrix rows do not sum to one")
+    reachable = _reachability(probabilities, normalized_states)
+    unreachable = [
+        state
+        for state, can_reach in zip(normalized_states, reachable, strict=True)
+        if state not in ABSORBING_STATES and not can_reach
+    ]
+    if unreachable:
+        raise ValueError(
+            "Transient states cannot reach an absorbing state: "
+            + ", ".join(unreachable)
+        )
+    return MarkovModel(normalized_states, counts, probabilities, reachable)
+
+
 def conversion_probability(model: MarkovModel) -> float:
     """Return eventual Conversion absorption probability starting from Start."""
 
@@ -319,22 +383,20 @@ def calculate_removal_effects(
     return baseline, tuple(results)
 
 
-def calculate_streaming_removal_effects(
-    path_factory: Callable[[], Iterable[Sequence[str]]],
+def calculate_model_removal_effects(
+    baseline_model: MarkovModel,
     *,
     tolerance: float = FLOATING_POINT_TOLERANCE,
-) -> tuple[MarkovModel, float, tuple[RemovalResult, ...]]:
-    """Build one streamed baseline, then remove each graph state independently."""
+) -> tuple[float, tuple[RemovalResult, ...]]:
+    """Calculate removal effects from one validated baseline model."""
 
-    baseline_model = build_transition_model_streaming(path_factory())
     baseline = conversion_probability(baseline_model)
     if baseline <= tolerance:
         raise ValueError("Baseline Conversion probability is zero")
-    channels = tuple(
-        state for state in baseline_model.states if state not in RESERVED_STATES
-    )
     results: list[RemovalResult] = []
-    for channel in channels:
+    for channel in (
+        state for state in baseline_model.states if state not in RESERVED_STATES
+    ):
         removed_model = remove_channel(baseline_model, channel)
         without_probability = conversion_probability(removed_model)
         raw_effect = 1.0 - without_probability / baseline
@@ -350,7 +412,22 @@ def calculate_streaming_removal_effects(
                 materially_negative=effect < -tolerance,
             )
         )
-    return baseline_model, baseline, tuple(results)
+    return baseline, tuple(results)
+
+
+def calculate_streaming_removal_effects(
+    path_factory: Callable[[], Iterable[Sequence[str]]],
+    *,
+    tolerance: float = FLOATING_POINT_TOLERANCE,
+) -> tuple[MarkovModel, float, tuple[RemovalResult, ...]]:
+    """Build one streamed baseline, then remove each graph state independently."""
+
+    baseline_model = build_transition_model_streaming(path_factory())
+    baseline, results = calculate_model_removal_effects(
+        baseline_model,
+        tolerance=tolerance,
+    )
+    return baseline_model, baseline, results
 
 
 def normalize_removal_effects(

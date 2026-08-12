@@ -1,15 +1,15 @@
 # Data Dictionary
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 ## Current implementation status
 
-Phase 3 and Phase 4 attribution outputs are created and validated on the
-approved Phase 2B conversion-path layers in
-`ga4-multi-touch-attribution.ga4_attribution`. The six Phase 4 tables use the
-approved 30-day Null definition and graph-state removal version
-`phase4_markov_30d_anderl_v2_20260811`. Existing tables inherit the dataset's
-60-day default expiration.
+Phase 3, Phase 4, and Phase 5 outputs are created and validated on the approved
+Phase 2B conversion-path layers in
+`ga4-multi-touch-attribution.ga4_attribution`. Phase 5 adds six create-only
+sensitivity, bootstrap, manifest, and validation objects without modifying any
+prior-phase table. Existing tables inherit the dataset's 60-day default
+expiration.
 
 ## Core tables
 
@@ -210,6 +210,56 @@ The following definitions are current validated BigQuery objects.
   right-censoring, overlap, state transitions, absorption, removal effects,
   attribution reconciliation, comparison, and Phase 2B/3 regression.
 - Validated rows: 70; all checks pass.
+
+## Phase 5 sensitivity and stability tables
+
+### `phase5_sensitivity_results`
+
+- Grain: one scenario, cohort view, attribution model, and channel; 276 rows.
+- Stores scenario populations and path statistics, channel touchpoint
+  composition, removal effects where applicable, attributed conversions and
+  revenue, conversion/revenue shares, deterministic ranks, tie flags, and the
+  scenario version.
+- Includes both population-impact and common-cohort lookback views. Unknown and
+  Other remain technical model states.
+
+### `phase5_rank_stability`
+
+- Grain: one deterministic scenario, cohort view, model, and channel; 187 rows.
+- Stores baseline/scenario shares and ranks, absolute rank shift, absolute
+  percentage-point and relative share changes, Spearman correlation, Top-3
+  overlap, maximum absolute rank shift, and tie diagnostics.
+
+### `phase5_bootstrap_replicates`
+
+- Grain: one successful replicate and channel, or one failed replicate; 4,500
+  rows because all 500 replicates succeeded for all 9 channels.
+- Stores seed, user draws, unique selected clusters, removal effect, Markov
+  share, rank, replicate conversion probability, active state count, status,
+  and failure reason.
+
+### `phase5_bootstrap_summary`
+
+- Grain: one Markov channel; 9 rows.
+- Stores baseline share/effect/rank, bootstrap mean/median/standard deviation,
+  2.5th and 97.5th percentiles, rank range, mean/median rank, Top-1/3/5
+  probabilities, attempted/successful/failed counts, and seed.
+
+### `phase5_scenario_manifest`
+
+- Grain: one approved scenario; 7 rows.
+- Records the single changed assumption, baseline/sensitivity flag, lookback,
+  Null horizon, repeated-channel and Direct treatments, bootstrap contract,
+  populations, model-validation counters, tie convention, and common baseline
+  metadata fingerprint.
+
+### `phase5_validation_summary`
+
+- Grain: one Phase 5 acceptance check; 56 rows, all passing.
+- Covers Phase 2B/3/4 regressions, unchanged baselines, scenario isolation,
+  transition and absorbing-state validity, effect/share reconciliation,
+  common-cohort consistency, rank validity, bootstrap accounting, seed,
+  probability bounds, and failed-replicate visibility.
 
 ## Rule and audit tables
 

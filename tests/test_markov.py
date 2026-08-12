@@ -10,6 +10,7 @@ from src.attribution.markov import (
     NULL_STATE,
     START_STATE,
     build_transition_model,
+    build_transition_model_from_counts,
     build_transition_model_streaming,
     calculate_removal_effects,
     calculate_streaming_removal_effects,
@@ -194,6 +195,35 @@ def test_streaming_model_matches_in_memory_model() -> None:
         streaming.transition_probabilities,
         in_memory.transition_probabilities,
     )
+
+
+def test_count_matrix_model_matches_path_model() -> None:
+    paths = [
+        (START_STATE, "Email", CONVERSION_STATE),
+        (START_STATE, "Direct", NULL_STATE),
+        (START_STATE, "Email", "Direct", CONVERSION_STATE),
+    ]
+    expected = build_transition_model(paths)
+    observed = build_transition_model_from_counts(
+        expected.states,
+        expected.transition_counts,
+    )
+    assert np.array_equal(observed.transition_counts, expected.transition_counts)
+    assert np.allclose(
+        observed.transition_probabilities,
+        expected.transition_probabilities,
+    )
+    assert conversion_probability(observed) == pytest.approx(
+        conversion_probability(expected)
+    )
+
+
+def test_count_matrix_model_rejects_zero_outgoing_transient_state() -> None:
+    states = (START_STATE, "Email", CONVERSION_STATE, NULL_STATE)
+    counts = np.zeros((4, 4), dtype=np.int64)
+    counts[0, 1] = 1
+    with pytest.raises(ValueError, match="Email"):
+        build_transition_model_from_counts(states, counts)
 
 
 def test_streaming_removal_effects_use_one_baseline_matrix() -> None:

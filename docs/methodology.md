@@ -1,14 +1,13 @@
 # Methodology
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 ## Current implementation status
 
-Phase 3 rule-based attribution remains implemented and validated on the
-finalized Phase 2B revised conversion paths. Phase 4 journey construction,
-first-order transition logic, graph-state removal, normalized attribution, and
-rule-model comparison are implemented. All six Phase 4 outputs exist and all
-70 Phase 4 checks pass.
+Phase 3 rule-based attribution, Phase 4 first-order Markov attribution, and
+Phase 5 sensitivity and stability analysis are implemented. The six Phase 5
+outputs exist and all 56 Phase 5 checks pass against immutable prior-phase
+baselines.
 
 ## Core event and order definitions
 
@@ -241,12 +240,51 @@ population, censoring, overlap, baseline transition matrix, absorption,
 removal effects, normalized attribution, comparison shape, and regressions.
 All pass.
 
-## Later analytical workflow
+## Phase 5 sensitivity and stability
 
-Phase 4 is complete and stops for review before Phase 5 sensitivity work. The
-30-day Null population and graph-state removal semantics are both approved and
-versioned.
+Every deterministic scenario begins independently from the approved baseline;
+no scenario stacks two modeling changes.
 
-All future attribution is descriptive. Neither rule-based credit nor Markov
-removal effects establish causal incrementality; causal budget decisions require
-an experiment or another defensible causal design.
+### Conversion lookback
+
+The approved `conversion_touchpoints` table remains unchanged. A scenario keeps
+touchpoints whose `seconds_before_conversion` is at most 7, 14, or 30 complete
+days, then recomputes touchpoint numbering and all five Phase 3 formulas. The
+primary comparison uses the intersection of orders attributable in every
+window. A parallel population-impact view reports each natural scenario
+population. Both executed views contain the same 4,457 orders, but remain
+explicit to protect future comparisons from denominator drift.
+
+### Null inactivity
+
+The 14-day sensitivity repeats the Phase 4 segmentation with 14 complete
+inactivity days from `session_end_ts`. Expiry remains strictly before the
+exclusive observation boundary. Finalized Conversion paths remain authoritative.
+A completed Null candidate sharing any Session with a finalized Conversion path
+is excluded as a whole; right-censored candidates never enter the model.
+
+### Repeated channels and Direct
+
+Consecutive compression replaces adjacent identical channel states with one
+state and leaves non-consecutive repeats untouched. The Direct scenario deletes
+every Direct state only when another channel exists. Direct-only paths and the
+original Conversion/Null endpoints remain unchanged. Newly adjacent identical
+non-Direct states are not compressed. This is a Markov path sensitivity, not
+the Phase 3 Last Non-direct Click rule.
+
+### User-level cluster bootstrap
+
+Completed Phase 4 journeys are grouped by `user_pseudo_id`. Each of 500
+replicates draws all 179,498 users with replacement using NumPy generator seed
+`20260812`. A selected user's full set of Conversion and Null journeys enters
+with the user's sampling multiplicity. Sparse user-level edge counts rebuild
+the transition matrix, approved graph-state removal effects, normalized shares,
+and ranks for every replicate. Right-censored journeys are excluded. Failures
+are retained with reasons; the executed run has zero failures.
+
+Ranks use descending share and channel name ascending only as a deterministic
+secondary key. Exact ties retain a tie flag, so the secondary ordering does not
+imply substantive superiority.
+
+Phase 5 remains descriptive. It does not establish causal incrementality,
+incremental revenue, or an optimal budget and stops before Phase 6.
