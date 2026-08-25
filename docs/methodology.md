@@ -1,13 +1,12 @@
 # Methodology
 
-Last updated: 2026-08-12
+Last updated: 2026-08-14
 
 ## Current implementation status
 
-Phase 3 rule-based attribution, Phase 4 first-order Markov attribution, and
-Phase 5 sensitivity and stability analysis are implemented. The six Phase 5
-outputs exist and all 56 Phase 5 checks pass against immutable prior-phase
-baselines.
+Phase 3 rule-based attribution, Phase 4 first-order Markov attribution, Phase 5
+sensitivity and stability analysis, and Phase 6 business reporting are
+implemented. All 42 Phase 6 checks pass against immutable Phase 2B-5 baselines.
 
 ## Core event and order definitions
 
@@ -286,5 +285,104 @@ Ranks use descending share and channel name ascending only as a deterministic
 secondary key. Exact ties retain a tie flag, so the secondary ordering does not
 imply substantive superiority.
 
-Phase 5 remains descriptive. It does not establish causal incrementality,
-incremental revenue, or an optimal budget and stops before Phase 6.
+The Phase 5 layer remains descriptive. It does not establish causal
+incrementality, incremental revenue, or an optimal budget.
+
+## Phase 6 business reporting
+
+Phase 6 reads only validated local BigQuery tables and does not rescan the
+public events wildcard. Its create-only runner re-executes the stored Phase
+2B-5 validation gates, records row count, modification timestamp, etag, and
+schema for every protected table, hashes that metadata snapshot, dry-runs each
+material query, and verifies the same snapshot after execution.
+
+### Channel funnel stage incidence
+
+Funnel events are aggregated from `event_base` to the existing validated
+`session_key` and joined to the one-row-per-Session `session_touchpoints` table.
+The analysis includes only attribution-eligible, non-admin Sessions and reuses
+the approved Phase 2B channel without reconstructing source evidence.
+
+For channel `c` and stage event `e`, the reported rate is:
+
+```text
+stage Session incidence(c, e)
+  = distinct eligible Sessions in c containing e
+    / all attribution-eligible Sessions in c
+```
+
+The four events are `view_item`, `add_to_cart`, `begin_checkout`, and
+`purchase`. They are independent Session incidences. Phase 6 does not validate
+that the events occur in a strict sequence and does not call these stage-to-stage
+conversion rates.
+
+### Journey summaries
+
+`conversion_touchpoints` remains the sole source of converting paths. Phase 6
+groups its finalized rows once per order, preserving touchpoint order and
+repeated Sessions/channels. It calculates:
+
+- total attributable conversions and revenue;
+- single-touch and multi-touch shares;
+- exact mean and median path length;
+- path-length distribution;
+- complete channel-path frequency;
+- first-touch and last-touch channel distributions.
+
+The dashboard mart uses a tagged long form so `PATH_LENGTH`, `CONVERTING_PATH`,
+`FIRST_TOUCH_CHANNEL`, and `LAST_TOUCH_CHANNEL` each independently reconcile to
+the same 4,457-order, USD 308,208 population.
+
+### Business attribution comparison
+
+`attribution_business_summary` begins with the validated
+`rule_markov_comparison` output rather than recalculating model weights. It adds
+a revenue share and deterministic revenue rank inside each model. Markov minus
+Last Click differences are taken directly from the validated Phase 4 comparison
+and repeated for each channel/model row for BI filtering.
+
+Deterministic Markov rank/share ranges are aggregated from the four stored
+`completed_outcomes` Markov rows in `phase5_sensitivity_results`: the baseline,
+14-day Null inactivity, consecutive-channel compression, and mixed-path Direct
+omission. Bootstrap mean, percentile interval, rank range, and Top-k frequency
+are copied from `phase5_bootstrap_summary`. Phase 6 validation compares those
+fields back to their source values within numerical tolerance.
+
+### Figures and evidence categories
+
+Python plotting functions in `src/attribution/reporting.py` read only the
+dashboard mart exports and save matplotlib figures to `reports/figures/`.
+Channel bases are displayed on the funnel chart. Long path-length tails are
+combined only for the figure's `10+` display; the mart retains exact lengths.
+
+The report classifies interpretations as:
+
+1. **Robust findings:** supported across deterministic sensitivity and
+   bootstrap evidence.
+2. **Directional findings:** visible in journeys or attribution but dependent
+   on assumptions or small samples.
+3. **Requires experimentation:** any statement about incremental conversions,
+   incremental revenue, or changing investment.
+
+### Approved spend omission
+
+The public sample has no reliable complete channel spend. Phase 6 therefore
+creates no simulated-spend input, ROAS metric, budget mart, or numeric
+reallocation. This is an approved scope decision and not a failed validation.
+Reliable future spend may be joined by channel and period to the business
+attribution mart, but model-dependent ROAS would remain descriptive.
+
+### Proposed incrementality experiment
+
+The follow-up design is a matched-geo randomized Paid Search lift test.
+Treatment geographies receive an owner-selected, pre-specified feasible spend
+increase; matched controls retain business as usual. The primary outcome is
+valid order revenue per geo. A pre-specified difference-in-differences or
+covariate-adjusted geo lift estimator measures incremental revenue, with order
+count, margin where available, conversion rate, acquisition cost, spend
+delivery, cannibalization, and cross-channel shifts as guardrails.
+
+Geo spillover, auction interference, seasonality, concurrent promotions,
+treatment non-compliance, tracking changes, low power, and heterogeneous effects
+must be assessed before any causal budget conclusion. The design is a proposal;
+no experiment result is inferred from attribution.

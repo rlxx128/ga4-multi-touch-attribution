@@ -1,6 +1,6 @@
 # Decision Register
 
-Last updated: 2026-08-12
+Last updated: 2026-08-14
 
 This register separates owner-approved analytical definitions from unresolved
 choices. The public GA4 sample is used for portfolio analysis and does not
@@ -10,7 +10,7 @@ represent the actual business performance of Google Merchandise Store.
 
 | Decision | Confirmed value | Scope | Confirmed on |
 |---|---|---|---|
-| Current phase | Phase 5 sensitivity and stability implemented on `phase5-sensitivity-stability` | Six create-only outputs and all local/regression gates are validated; stopped before Phase 6 | 2026-08-12 |
+| Current phase | Phase 6 business reporting implemented on `main` | Three business marts, one validation table, CSV exports, six figures, and final reports are executed; stop after Phase 6 for review | 2026-08-14 |
 | GCP project | `ga4-multi-touch-attribution` | Configured execution project | 2026-08-03 |
 | BigQuery dataset | `ga4_attribution` | Existing dataset only | 2026-08-03 |
 | BigQuery location | `US` | Query jobs and destination tables | 2026-08-03 |
@@ -54,6 +54,11 @@ represent the actual business performance of Google Merchandise Store.
 | Phase 5 repeated-channel sensitivity | Compress only consecutive identical channel states | Non-consecutive repeats and all journey endpoints remain unchanged | 2026-08-12 |
 | Phase 5 bootstrap | User-level clusters; sample with replacement; preserve every completed journey and multiplicity; 500 replicates; seed `20260812` | Rebuild matrix, removal effects, shares, and ranks locally; exclude right-censored journeys | 2026-08-12 |
 | Phase 5 ranking | Descending share, then channel name ascending solely for deterministic tie handling | Lexicographic order does not imply substantive superiority for tied channels | 2026-08-12 |
+| Phase 6 funnel denominator | All attribution-eligible Sessions assigned to each approved Phase 2B channel | Report independent Session-level event incidence for `view_item`, `add_to_cart`, `begin_checkout`, and `purchase`; do not imply ordered stage conversion | 2026-08-14 |
+| Phase 6 budget scope | Omit simulated spend, ROAS, and budget reallocation | Reliable spend is absent; retain only a future extension note and do not fail validation for the omission | 2026-08-14 |
+| Phase 6 dashboard delivery | Tool-agnostic BigQuery marts, CSV exports, and presentation-ready figures | Do not build Power BI, Looker Studio, Tableau, or Streamlit in Phase 6 | 2026-08-14 |
+| Phase 6 interpretation | Classify evidence as Robust, Directional, or Requires experimentation | Attribution and bootstrap stability remain descriptive; incremental outcomes require an experiment | 2026-08-14 |
+| Phase 6 experiment | Propose a matched-geo randomized Paid Search lift test | Proposal only; no fabricated lift, incremental revenue, or incremental ROAS | 2026-08-14 |
 
 ## Phase 2B executed evidence
 
@@ -153,13 +158,34 @@ channel-level results.
 
 See `reports/phase5_sensitivity_stability.md` for complete executed results.
 
+## Phase 6 executed evidence
+
+- The attribution-eligible funnel population contains 356,409 Sessions across
+  9 observed channels. Its counts reconcile to `session_touchpoints` and
+  event-stage flags reconcile to `event_base`.
+- The journey mart reconciles every tagged distribution to 4,457 attributable
+  conversions and USD 308,208, with mean path length 2.149, median 1, and
+  multi-touch share 47.86%.
+- The attribution business mart contains 54 rows for 9 channels x 6 validated
+  models. Every model reconciles to 4,457 conversions and USD 308,208.
+- Organic Search is revenue rank 1 in all six models, all four stored
+  deterministic Markov states, and all 500 bootstrap replicates.
+- The immutable Phase 2B-5 metadata fingerprint is
+  `17237893df65b1f0df9ab2266e3dbed26be6f216aa3098a0498b01b72a51218c`.
+- `channel_funnel_summary` has 9 rows, `journey_summary` 722,
+  `attribution_business_summary` 54, and `phase6_validation_summary` 42.
+- All 42 Phase 6 checks pass. CSV exports and six presentation-ready figures
+  were generated without creating a dashboard, simulated-spend input, ROAS
+  metric, budget table, or Shapley model.
+
+See `reports/phase6_business_reporting.md` and `reports/analysis_report.md` for
+executed business findings, limitations, recommendations, and the proposed
+incrementality experiment.
+
 ## Decisions still pending
 
 | Decision | When required | Evidence / expected impact |
 |---|---|---|
-| Simulated channel costs | Phase 6 | Use owner-supplied simulated parameters only; do not imply observed spend. |
-| Dashboard tool | Phase 6 | Decide after analytical tables are stable. |
-| Business recommendation language | Phase 6 | Keep attribution descriptive and propose an incrementality experiment. |
 | BigQuery table retention | Before the dataset's 60-day default expiry or long-term handoff | Changing expiration metadata requires separate approval. |
 
 ## Phase 2B close-out amendment — 2026-08-06

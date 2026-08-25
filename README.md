@@ -1,73 +1,168 @@
-# GA4 Multi-Touch Attribution and Marketing Budget Scenario Analysis
+# GA4 Multi-Touch Attribution and Marketing Decision Analysis
 
-This portfolio project uses the public GA4 ecommerce sample in BigQuery to
-reconstruct user journeys, compare descriptive attribution methods, and prepare
-transparent simulated marketing-budget scenarios.
+This portfolio project reconstructs ecommerce journeys from the public
+obfuscated GA4 sample in BigQuery, compares six descriptive attribution models,
+tests their stability, and publishes business-ready reporting marts and figures.
 
-The project does **not** represent the actual business performance of Google
-Merchandise Store. Attribution results will describe observed paths and must not
-be interpreted as proof of causal incrementality.
+It does **not** represent the actual business performance of Google Merchandise
+Store. Attribution describes how observed conversion credit changes under a
+model; it is not proof of causal incrementality.
 
-## Current status
+## Business questions
 
-Phase 5 sensitivity and stability analysis is implemented and validated on the
-immutable Phase 2B, Phase 3, and Phase 4 baselines. The approved matrix covers
-7/14/30-day conversion lookbacks, 14/30-day Null inactivity, consecutive
-channel compression, mixed-path Direct omission with Direct-only fallback, and
-a 500-replicate user-level cluster bootstrap using seed `20260812`. All 56
-Phase 5 checks pass. The top Markov ordering is robust, while Direct's share is
-materially dependent on path treatment. See
-`reports/phase5_sensitivity_stability.md` for executed results and limitations.
+1. How does Session-level funnel activity differ by channel?
+2. What do converting journeys look like?
+3. How do First Click, Last Click, Last Non-direct Click, Linear, Time Decay,
+   and Markov attribution redistribute conversions and revenue?
+4. Which findings remain stable under path-definition sensitivity and
+   user-cluster bootstrap analysis?
+5. What should be treated as descriptive evidence, and what requires an
+   incrementality experiment before a budget decision?
 
-## Data source
+## Headline results
+
+The executed reporting population contains:
+
+- 356,409 attribution-eligible Sessions;
+- 4,457 attributable orders;
+- USD 308,208 attributable revenue;
+- 9,577 retained conversion touchpoints;
+- 2,324 single-touch conversions (52.14%);
+- 2,133 multi-touch conversions (47.86%);
+- mean path length 2.149 and median path length 1.
+
+Organic Search ranks first by attributed revenue in all six baseline models. It
+also ranks first in all validated deterministic Markov scenarios and all 500
+user-cluster bootstrap replicates. Its baseline Markov share is 40.45%, and the
+bootstrap 95% percentile interval is 39.12%-41.69%.
+
+The stable technical Markov Top 3 is Organic Search, Referral, and Unknown.
+Unknown is unresolved source evidence, not an actionable marketing channel.
+
+Markov redistributes attributed revenue versus Last Click toward Direct
+(USD +5,415.90), Unknown (USD +4,492.33), and Paid Search (USD +2,049.66), and
+away from Referral (USD -7,905.51) and Organic Search (USD -3,986.12). These
+differences are model allocation, not incremental revenue.
+
+![Markov versus Last Click](reports/figures/phase6_markov_vs_last_click.png)
+
+## Channel funnel
+
+The funnel output reports **channel-level funnel stage incidence rates**. Each
+metric counts distinct validated Sessions containing the event and divides by
+all attribution-eligible Sessions for the channel. Event order is not inferred,
+so the metrics are not strictly sequential within-Session conversion rates.
+
+Referral combines 37,486 Sessions with 3.39% purchase-event Session incidence.
+Organic Search supplies the largest volume at 150,564 Sessions and has 1.34%
+purchase incidence. Email's 12.00% purchase incidence is based on only 200
+Sessions and should not be generalized without more data.
+
+![Channel funnel stage incidence](reports/figures/phase6_channel_funnel_incidence.png)
+
+## Customer journeys
+
+The most common complete converting path is Organic Search only, with 1,138
+conversions (25.53%). Referral only contributes 674, Unknown only 276, and
+Direct only 188. The most common multi-touch path is
+`Organic Search > Organic Search` with 153 conversions.
+
+![Converting path length](reports/figures/phase6_path_length_distribution.png)
+
+![Top converting paths](reports/figures/phase6_top_converting_paths.png)
+
+## Stability and interpretation
+
+Robust findings are supported across deterministic sensitivity scenarios and
+the 500-replicate user-cluster bootstrap. Directional findings describe journey
+or model structure but depend on assumptions. Any claim about incremental
+conversions, incremental revenue, or changing investment requires an
+experiment.
+
+Direct illustrates this boundary: it remains rank 4, but its Markov share falls
+from 12.70% to 3.97% when Direct is omitted from mixed paths in the approved
+sensitivity. A stable rank does not guarantee a stable magnitude.
+
+![Markov bootstrap uncertainty](reports/figures/phase6_markov_bootstrap_uncertainty.png)
+
+## Reporting outputs
+
+Phase 6 created four create-only BigQuery tables:
+
+| Table | Grain | Rows |
+|---|---|---:|
+| `channel_funnel_summary` | one observed attribution-eligible channel | 9 |
+| `journey_summary` | one tagged journey summary member | 722 |
+| `attribution_business_summary` | one channel and attribution model | 54 |
+| `phase6_validation_summary` | one Phase 6 acceptance check | 42 |
+
+All 42 Phase 6 checks pass. The pipeline verifies all stored Phase 2B-5 gates,
+records a metadata fingerprint before execution, dry-runs every material query,
+uses a 1 GB per-query billing cap, and verifies that all upstream table metadata
+remains unchanged.
+
+Dashboard-ready CSV exports are written to `reports/tables/`; six
+presentation-ready figures are written to `reports/figures/`. No dashboard tool
+is embedded, so the marts can be consumed later by Power BI, Looker Studio,
+Tableau, or another BI client.
+
+No simulated-spend table, ROAS calculation, or numeric budget recommendation
+was created. Reliable future spend may be joined to the attribution mart for an
+explicitly model-dependent extension.
+
+## Proposed causal follow-up
+
+The report proposes a matched-geo randomized Paid Search lift test. Treatment
+geographies would receive a pre-specified feasible spend increase while matched
+controls remain at business as usual. Valid order revenue per geo would be the
+primary outcome, analyzed with a pre-specified difference-in-differences or
+covariate-adjusted geo lift estimator. Incremental ROAS would be reported only
+from verified incremental revenue and spend.
+
+No experimental result is fabricated or implied.
+
+## Architecture
 
 ```text
-bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*
+Public GA4 events_*
+        |
+        v
+event_base -> session_touchpoints -> orders / conversion_touchpoints
+                                      |
+                                      +-> five rule-based models
+                                      +-> Markov journeys and removal effects
+                                      +-> Phase 5 sensitivity and bootstrap
+                                      +-> Phase 6 business reporting marts
 ```
 
-Configured analysis range: 2020-11-01 through 2021-01-31. The public sample is
-obfuscated and may contain null, blank, or internally inconsistent fields.
+BigQuery SQL performs event cleaning, Session/path construction, rule-based
+attribution, and validation. Python implements Markov calculations, sensitivity
+analysis, bootstrap procedures, report exports, and matplotlib figures. Reusable
+logic lives under `src/attribution/`; notebooks are not required for execution.
 
 ## Repository layout
 
 ```text
 config/              Non-sensitive configuration examples
-dashboard/           Future dashboard assets
-docs/                Project specification and decision register
-notebooks/           Thin analysis notebooks built on reusable source code
-reports/figures/     Generated figures for reporting
-reports/tables/      Generated result tables for reporting
-scripts/             Environment, audit, and guarded build runners
-sql/audit/           Data-quality, source, mapping, and path audits
-sql/staging/         Staging models
-sql/intermediate/    Intermediate models
-sql/marts/           Reporting models
-sql/validation/      SQL data-quality checks
-src/attribution/     Reusable Python business logic
-tests/               Python tests
+docs/                Decisions, methodology, and data dictionary
+reports/              Executed business reports, figures, and local CSV exports
+scripts/              Guarded phase runners and environment checks
+sql/audit/            Data-quality and business-rule audits
+sql/staging/          Event-grain model
+sql/intermediate/     Session, conversion-path, and scenario models
+sql/marts/            Attribution and business reporting marts
+sql/validation/       Executable phase acceptance checks
+src/attribution/      Reusable Markov, sensitivity, and reporting logic
+tests/                Python and runner contract tests
 ```
 
-## Local setup
+## Reproduce locally
 
-Python 3.11 or a compatible later version is required. Create a virtual
-environment and install `requirements.txt` only after installation is approved.
-This repository never stores cloud credentials; Google Application Default
-Credentials (ADC) are used for authentication.
+Python 3.11 or a compatible later version is required. Install the declared
+dependencies in an approved virtual environment. The project uses Google
+Application Default Credentials and never stores cloud credentials.
 
-In the user's normal VS Code PowerShell environment, `gcloud` and `bq` are
-available on `PATH`. The restricted Codex execution environment did not inherit
-that same `PATH`, so the Phase 0 diagnostic used the known Google Cloud SDK
-installation path as a fallback. The gcloud logging permission warning observed
-during inspection is specific to that restricted environment and is not recorded
-as a normal VS Code PowerShell issue.
-
-ADC is available and has quota project `ga4-multi-touch-attribution`. The project
-scripts nevertheless require `GCP_PROJECT_ID` to be supplied explicitly; they do
-not infer the execution project from ADC or embed it in source code.
-
-Set the required variables in the current shell. The committed `.env.example`
-and `config/project.example.yaml` contain non-sensitive examples only. Scripts
-read environment variables directly and do not automatically load `.env` files.
+Set the required environment variables:
 
 ```powershell
 $env:GCP_PROJECT_ID = "ga4-multi-touch-attribution"
@@ -79,142 +174,50 @@ $env:END_DATE = "2021-01-31"
 $env:MAXIMUM_BYTES_BILLED = "1000000000"
 ```
 
-Run the local diagnostic:
+Run the Phase 6 preflight without creating objects:
 
 ```powershell
-python scripts/check_environment.py
+python scripts/run_phase6.py
 ```
 
-Run the bounded BigQuery connection test:
+Create the approved outputs only when they do not already exist:
 
 ```powershell
-python scripts/test_bigquery_connection.py
+python scripts/run_phase6.py --execute
 ```
 
-The connection test uses ADC, reads only the `20201101` source suffix, performs
-a dry run first, enforces a 1,000,000,000-byte billing ceiling, and executes only
-a `SELECT` query. It does not create or modify cloud resources.
-
-Run Phase 2A preflight only:
+If execution stops after an exact create-only prefix, resume without replacing
+any table:
 
 ```powershell
-python scripts/run_phase2a.py
+python scripts/run_phase6.py --execute --resume
 ```
 
-Run the new-table build only after approval:
+Run the complete test suite:
 
 ```powershell
-python scripts/run_phase2a.py --execute
+python -m pytest -q
 ```
 
-The runner refuses to replace existing target tables. It supports
-`--execute --resume` only when existing Phase 2A tables form a validated,
-incomplete execution prefix. Every query is dry-run first and uses the configured
-maximum-bytes-billed ceiling.
+## Documentation
 
-The approved Phase 2B runner is resumable and dry-runs every query before
-execution:
-
-```powershell
-python scripts/run_phase2b.py --execute
-```
-
-Recovery flags such as `--rebuild-source`, `--rebuild-derived`, and
-`--rebuild-validation` require both `--execute` and `--resume`; they exist for
-auditable rebuilds after an implementation correction and should not be used as
-ordinary first-run options.
-
-Run the create-only Phase 3 preflight:
-
-```powershell
-python scripts/run_phase3.py
-```
-
-After approval, create and validate the three Phase 3 outputs:
-
-```powershell
-python scripts/run_phase3.py --execute
-```
-
-The Phase 3 runner consumes `conversion_touchpoints`, dry-runs every query,
-enforces the 1,000,000,000-byte ceiling, and refuses to replace an existing
-Phase 3 output.
-
-Run the Phase 4 create-only preflight:
-
-```powershell
-python scripts/run_phase4.py
-```
-
-The approved execution command is:
-
-```powershell
-python scripts/run_phase4.py --execute
-```
-
-The execution performs population, transition, removal-effect, and
-normalization checks before creating persistent Phase 4 objects. It is
-create-only and now refuses to run again while the validated outputs exist.
-
-Run the Phase 5 create-only preflight:
-
-```powershell
-python scripts/run_phase5.py
-```
-
-The approved execution command is:
-
-```powershell
-python scripts/run_phase5.py --execute
-```
-
-Phase 5 reads only persisted prior-phase tables, dry-runs every SQL query,
-executes the bootstrap locally after one compact path extraction, verifies a
-before/after metadata fingerprint for every baseline table, and refuses to
-replace any Phase 5 output.
-
-## Analytical phases
-
-1. Repository and environment
-2. Data audit
-3. Core data model
-4. Rule-based attribution
-5. Markov attribution
-6. Sensitivity and stability
-7. Business reporting
-
-Each phase must pass its validation checks before the next phase begins. See
-`docs/decisions.md` for confirmed configuration, suggested defaults, and choices
-that still require human approval. Planned schemas and analytical methods are
-documented in `docs/data_dictionary.md` and `docs/methodology.md`.
+- [Business reporting](reports/phase6_business_reporting.md)
+- [Executive analysis](reports/analysis_report.md)
+- [Methodology](docs/methodology.md)
+- [Decision register](docs/decisions.md)
+- [Data dictionary](docs/data_dictionary.md)
 
 ## Limitations
 
-- The public data covers a short, obfuscated observation window.
-- Session sources prioritize non-internal event evidence and external referrers;
-  first-user acquisition is retained only as an explicitly labelled fallback.
-- Missing-source referral media are retained as Referral with a quality flag;
-  they do not identify a specific referring website.
-- Exact hosts `analytics.google.com` and `moma.corp.google.com` are retained as
-  Internal/Admin Sessions but excluded from attribution paths.
-- The current order's own conversion Session can cross the previous-order
-  boundary only through an explicit, validated exception flag.
-- Nine eligible orders have no remaining attribution-eligible touchpoint after
-  Internal/Admin exclusion.
-- Time Decay uses the approved fixed seven-day half-life; alternative half-lives
-  are outside Phase 3.
-- Last Non-direct excludes only explicit Direct. Unknown remains eligible, and
-  an all-Direct path falls back to its final Direct touchpoint.
-- The approved Phase 4 Null baseline uses 30 complete inactivity days and has
-  substantial right censoring: 91,594 candidates remain as audit rows but are
-  excluded from transition estimation.
-- The final graph-state removal rule redirects probability entering a removed
-  channel to Null. It does not model channel substitution and may overstate
-  structural dependency when another channel would replace the removed one.
-- The rejected reconnect-style rule is retained in the decision history: it
-  preserved original outcomes and therefore generated zero removal effects.
-- `Unknown` is source evidence left unresolved after Phase 2B recovery. It is
-  not a real marketing channel or a directly actionable budget target.
-- The sample does not provide complete reliable channel spend, so future budget
-  work will be a parameterized scenario rather than actual ROAS estimation.
+- The public sample is obfuscated, time-bounded, and not actual store reporting.
+- Session-source recovery uses explicit fallbacks and leaves Unknown separate.
+- Funnel stages are independent Session incidences, not ordered conversions.
+- Nine valid orders have no attribution-eligible touchpoint after exclusions.
+- The Markov model is first order and its removal rule assumes no channel
+  substitution.
+- Right-censored journeys are excluded; left-boundary-truncated Null journeys
+  remain flagged.
+- Bootstrap intervals describe sampling stability, not causal uncertainty.
+- Reliable channel spend is absent, so no observed ROAS or budget optimum is
+  reported.
 - Descriptive attribution does not estimate causal incrementality.

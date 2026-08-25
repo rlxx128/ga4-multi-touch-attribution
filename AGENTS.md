@@ -514,19 +514,11 @@ At the end of every task:
 
 ## 22. Current instruction
 
-Begin with Phase 0 only.
+Phases 0 through 5 are completed and validated. The current approved phase is
+Phase 6 — Business Reporting.
 
-Do not implement attribution models during Phase 0.
+Do not modify validated Phase 2, Phase 2B, Phase 3, Phase 4, or Phase 5
+analytical definitions or outputs. The explicit current-phase task brief
+governs Phase 6 execution.
 
-First inspect the local environment and return:
-
-* available Python version;
-* Git status;
-* whether gcloud is installed;
-* whether Application Default Credentials are available;
-* whether BigQuery can be reached;
-* missing prerequisites;
-* proposed repository scaffold;
-* decisions that require human confirmation.
-
-Do not make cloud changes until approval is given.
+Do not begin post-Phase-6 work without human-owner approval.

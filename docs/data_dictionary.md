@@ -1,15 +1,14 @@
 # Data Dictionary
 
-Last updated: 2026-08-12
+Last updated: 2026-08-14
 
 ## Current implementation status
 
-Phase 3, Phase 4, and Phase 5 outputs are created and validated on the approved
-Phase 2B conversion-path layers in
-`ga4-multi-touch-attribution.ga4_attribution`. Phase 5 adds six create-only
-sensitivity, bootstrap, manifest, and validation objects without modifying any
-prior-phase table. Existing tables inherit the dataset's 60-day default
-expiration.
+Phase 3 through Phase 6 outputs are created and validated on the approved Phase
+2B conversion-path layers in `ga4-multi-touch-attribution.ga4_attribution`.
+Phase 6 adds three business-facing marts and one validation object without
+modifying any prior-phase table. Existing tables inherit the dataset's 60-day
+default expiration.
 
 ## Core tables
 
@@ -260,6 +259,79 @@ The following definitions are current validated BigQuery objects.
   transition and absorbing-state validity, effect/share reconciliation,
   common-cohort consistency, rank validity, bootstrap accounting, seed,
   probability bounds, and failed-replicate visibility.
+
+## Phase 6 business reporting tables
+
+### `channel_funnel_summary`
+
+- Grain: one observed attribution-eligible channel; validated rows: 9.
+- Population: all rows in `session_touchpoints` with
+  `is_attribution_eligible = TRUE`, excluding approved Internal/Admin traffic.
+- Counts: Sessions and distinct Sessions containing `view_item`, `add_to_cart`,
+  `begin_checkout`, or `purchase`.
+- Rates: `view_item_session_rate`, `add_to_cart_session_rate`,
+  `checkout_session_rate`, and `purchase_session_rate`; every denominator is
+  all attribution-eligible Sessions assigned to the channel.
+- Definition fields explicitly identify the metrics as channel-level funnel
+  stage incidence rates. They do not encode sequential within-Session event
+  progression.
+- Versions: approved Phase 2B mapping plus
+  `reporting_version = 'phase6_business_reporting_v1_20260814'`.
+
+### `journey_summary`
+
+- Grain: one tagged summary member; validated rows: 722.
+- `summary_type` distinguishes `OVERALL`, `PATH_LENGTH`, `CONVERTING_PATH`,
+  `FIRST_TOUCH_CHANNEL`, and `LAST_TOUCH_CHANNEL` rows.
+- Dimension fields: `dimension_key`, `dimension_label`, and deterministic
+  `sort_order`.
+- Measures: attributable conversions/revenue and their shares.
+- The `OVERALL` row additionally stores mean/median path length and
+  single-/multi-touch counts and shares.
+- Every non-overall summary type independently reconciles to 4,457 conversions
+  and USD 308,208.
+- Source: finalized `conversion_touchpoints`; conversion cycles are not rebuilt.
+- Versions: approved mapping/path definitions plus the Phase 6 reporting
+  version.
+
+### `attribution_business_summary`
+
+- Grain: one channel and model; validated rows: 54 for 9 channels x 6 models.
+- Models: First Click, Last Click, Last Non-direct Click, Linear, Time Decay,
+  and Markov.
+- Core metrics: attributed conversions/revenue, conversion/revenue shares, and
+  separate model-specific conversion and revenue ranks.
+- Comparison fields: Markov minus Last Click absolute and relative conversion
+  and revenue differences, repeated by channel for BI convenience.
+- Deterministic stability: stored Markov scenario count, rank/share range, and
+  Rank-1/Top-3 frequency reproduced from `phase5_sensitivity_results`.
+- Bootstrap stability: mean/median/stddev share, 2.5th/97.5th percentiles, rank
+  range, Top-1/3/5 frequencies, seed, and replicate accounting reproduced from
+  `phase5_bootstrap_summary`.
+- `is_business_presentation_channel` is false only for Unknown and Other. It
+  does not remove or renormalize either technical state.
+
+### `phase6_validation_summary`
+
+- Grain: one Phase 6 acceptance check; validated rows: 42.
+- Result: all checks pass.
+- Coverage: stored Phase 2B-5 validation gates, funnel source reconciliation,
+  rate/definition validity, journey population and revenue reconciliation,
+  six-model conversion/revenue reconciliation, Markov difference reproduction,
+  Phase 5 bootstrap reproduction, Organic Search stability, approved budget
+  scenario omission, and reporting versions.
+- The runner separately verifies an unchanged metadata snapshot and SHA-256
+  fingerprint for all protected Phase 2B-5 tables before and after execution.
+
+### Local Phase 6 reporting artifacts
+
+- CSV exports: one file for each Phase 6 BigQuery object in `reports/tables/`.
+- Baseline metadata: `phase6_baseline_metadata.json` records the protected table
+  snapshot and fingerprint.
+- Figures: six PNG files in `reports/figures/` covering channel funnel
+  incidence, path length, top paths, model revenue, Markov versus Last Click,
+  and Markov bootstrap uncertainty.
+- No simulated-spend, ROAS, budget-scenario, or dashboard object is created.
 
 ## Rule and audit tables
 

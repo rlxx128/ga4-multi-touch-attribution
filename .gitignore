@@ -35,9 +35,12 @@ temp/
 *.log
 *.csv
 
+# Generated figures stay local and must not be uploaded to a remote repository
+reports/figures/*
+!reports/figures/.gitkeep
+
 # OS and editor files
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
-
