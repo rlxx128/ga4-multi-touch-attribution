@@ -39,6 +39,9 @@ temp/
 reports/figures/*
 !reports/figures/.gitkeep
 
+# Dashboard working files stay local and must not be uploaded
+dashboard/
+
 # OS and editor files
 .DS_Store
 Thumbs.db

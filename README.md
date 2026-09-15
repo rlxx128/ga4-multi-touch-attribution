@@ -8,6 +8,17 @@ It does **not** represent the actual business performance of Google Merchandise
 Store. Attribution describes how observed conversion credit changes under a
 model; it is not proof of causal incrementality.
 
+## Current status
+
+Phases 0 through 6 are complete and validated. Phase 6 business reporting is
+the current approved endpoint: all 42 Phase 6 checks pass against the unchanged
+Phase 2B-5 baselines. The repository is now at the owner-review stop gate; no
+post-Phase-6 analysis has been started.
+
+Generated figures and dashboard working files are local-only artifacts. They
+are intentionally excluded from Git and are not published to the remote
+repository.
+
 ## Business questions
 
 1. How does Session-level funnel activity differ by channel?
@@ -44,8 +55,6 @@ Markov redistributes attributed revenue versus Last Click toward Direct
 away from Referral (USD -7,905.51) and Organic Search (USD -3,986.12). These
 differences are model allocation, not incremental revenue.
 
-![Markov versus Last Click](reports/figures/phase6_markov_vs_last_click.png)
-
 ## Channel funnel
 
 The funnel output reports **channel-level funnel stage incidence rates**. Each
@@ -58,18 +67,12 @@ Organic Search supplies the largest volume at 150,564 Sessions and has 1.34%
 purchase incidence. Email's 12.00% purchase incidence is based on only 200
 Sessions and should not be generalized without more data.
 
-![Channel funnel stage incidence](reports/figures/phase6_channel_funnel_incidence.png)
-
 ## Customer journeys
 
 The most common complete converting path is Organic Search only, with 1,138
 conversions (25.53%). Referral only contributes 674, Unknown only 276, and
 Direct only 188. The most common multi-touch path is
 `Organic Search > Organic Search` with 153 conversions.
-
-![Converting path length](reports/figures/phase6_path_length_distribution.png)
-
-![Top converting paths](reports/figures/phase6_top_converting_paths.png)
 
 ## Stability and interpretation
 
@@ -82,8 +85,6 @@ experiment.
 Direct illustrates this boundary: it remains rank 4, but its Markov share falls
 from 12.70% to 3.97% when Direct is omitted from mixed paths in the approved
 sensitivity. A stable rank does not guarantee a stable magnitude.
-
-![Markov bootstrap uncertainty](reports/figures/phase6_markov_bootstrap_uncertainty.png)
 
 ## Reporting outputs
 
@@ -101,10 +102,10 @@ records a metadata fingerprint before execution, dry-runs every material query,
 uses a 1 GB per-query billing cap, and verifies that all upstream table metadata
 remains unchanged.
 
-Dashboard-ready CSV exports are written to `reports/tables/`; six
-presentation-ready figures are written to `reports/figures/`. No dashboard tool
-is embedded, so the marts can be consumed later by Power BI, Looker Studio,
-Tableau, or another BI client.
+Dashboard-ready CSV exports are written to `reports/tables/`. Six
+presentation-ready figures are generated locally in `reports/figures/` but are
+excluded from Git. No dashboard tool is embedded, so the marts can be consumed
+later by Power BI, Looker Studio, Tableau, or another BI client.
 
 No simulated-spend table, ROAS calculation, or numeric budget recommendation
 was created. Reliable future spend may be joined to the attribution mart for an
